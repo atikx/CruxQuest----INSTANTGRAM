@@ -11,7 +11,7 @@ import "aos/dist/aos.css";
 
 createRoot(document.getElementById("root")!).render(
   <Router>
-    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+    <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
     <Toaster />
       <div className="">
         <AppNavbar />

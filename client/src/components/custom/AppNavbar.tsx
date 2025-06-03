@@ -50,7 +50,7 @@ export default function AppNavbar() {
     setIsSheetOpen(false);
   };
 
-  if (currentPath === "/auth") {
+  if (currentPath === "/auth" || currentPath === "/otp") {
     return null; // Hide navbar on auth page
   }
 
