@@ -14,9 +14,9 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").unique(),
+    email: text("email").unique().notNull(),
     username: text("username").notNull().unique(),
-    passwordHash: text("passwordHash").notNull(),
+    passwordHash: text("passwordHash"),
     name: text("name"),
     profilePictureUrl: text("profilePictureUrl").default(
       "https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg"

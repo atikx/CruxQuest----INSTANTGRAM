@@ -4,7 +4,7 @@ import postgres from "postgres";
 import "dotenv/config"
 
 const client = postgres(process.env.DATABASE_URL as string);
-export const db = drizzle(client, {
+export const Mydb = drizzle(client, {
   schema,
   logger: true,
 });

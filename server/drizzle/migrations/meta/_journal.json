@@ -15,6 +15,13 @@
       "when": 1748950747409,
       "tag": "0001_workable_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1748968449412,
+      "tag": "0002_quick_celestials",
+      "breakpoints": true
     }
   ]
 }
