@@ -17,7 +17,6 @@ import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store";
 
 export default function LoginPage() {
-
   const setUser = useAuthStore((state) => state.setUser);
   const navigate = useNavigate();
   useEffect(() => {
@@ -92,9 +91,11 @@ export default function LoginPage() {
         password: signupForm.password.trim(),
       });
       if (res.status === 200) {
-        toast.success("Sign Up successful", {});
+        toast.success("Sign Up successful", {
+          description: "Please enter the OTP sent on your email for verification.",
+        });
         setUser(res.data.user); // Set user in the store
-        navigate("/"); // Redirect to home page after successful signup
+        navigate("/otp"); // Redirect to home page after successful signup
       }
     } catch (error: any) {
       console.error("Error during signup:", error);

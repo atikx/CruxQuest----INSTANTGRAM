@@ -8,6 +8,13 @@
       "when": 1749019979362,
       "tag": "0000_perfect_sersi",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1749024374999,
+      "tag": "0001_daily_jackal",
+      "breakpoints": true
     }
   ]
 }

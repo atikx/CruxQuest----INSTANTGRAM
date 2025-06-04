@@ -9,11 +9,12 @@ import "aos/dist/aos.css";
 import { useAuthStore } from "./lib/store.ts";
 import api from "./lib/axiosinstance.ts";
 import { useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const Root = () => {
   const setUser = useAuthStore((state) => state.setUser);
   const [loading, setLoading] = useState(true);
-
+  const queryClient = new QueryClient();
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -33,16 +34,16 @@ const Root = () => {
   if (loading) return null;
 
   return (
-    <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
-      <Toaster />
-      <AppNavbar />
-      <App />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <Router>
+        <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+          <Toaster />
+          <AppNavbar />
+          <App />
+        </ThemeProvider>
+      </Router>
+    </QueryClientProvider>
   );
 };
 
-createRoot(document.getElementById("root")!).render(
-  <Router>
-    <Root />
-  </Router>
-);
+createRoot(document.getElementById("root")!).render(<Root />);

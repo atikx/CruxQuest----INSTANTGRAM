@@ -1,11 +1,13 @@
-"use client"
+"use client";
 
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import { toast } from "sonner"
-import { z } from "zod"
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -14,18 +16,20 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form"
+} from "@/components/ui/form";
 import {
   InputOTP,
   InputOTPGroup,
   InputOTPSlot,
-} from "@/components/ui/input-otp"
+} from "@/components/ui/input-otp";
+import api from "@/lib/axiosinstance";
+import { useAuthStore } from "@/lib/store";
 
 const FormSchema = z.object({
   pin: z.string().min(6, {
     message: "Your one-time password must be 6 characters.",
   }),
-})
+});
 
 export default function Otp() {
   const form = useForm<z.infer<typeof FormSchema>>({
@@ -33,22 +37,36 @@ export default function Otp() {
     defaultValues: {
       pin: "",
     },
-  })
+  });
+
+  const { setUser } = useAuthStore();
+  const navigate = useNavigate();
+
+  const verifyOtpMutation = useMutation({
+    mutationFn: async (otp: number) => {
+      const res = await api.post("/user/auth/verifyOtp", { otp });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success("OTP verified successfully!");
+      setUser(data.user);
+      navigate("/");
+    },
+    onError: () => {
+      toast.error("Failed to submit OTP. Please try again.");
+    },
+  });
 
   function onSubmit(data: z.infer<typeof FormSchema>) {
-    toast("You submitted the following values", {
-      description: (
-        <pre className="mt-2 w-[320px] rounded-md bg-neutral-950 p-4">
-          <code className="text-white">{JSON.stringify(data, null, 2)}</code>
-        </pre>
-      ),
-    })
+    verifyOtpMutation.mutate(parseInt(data.pin));
   }
 
   return (
     <div className="flex h-screen items-center justify-center bg-background">
       <div className="w-full max-w-md rounded-xl bg-card shadow-lg p-8 border border-border">
-        <h2 className="mb-6 text-2xl font-semibold text-center text-foreground">Verify OTP</h2>
+        <h2 className="mb-6 text-2xl font-semibold text-center text-foreground">
+          Verify OTP
+        </h2>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <FormField
@@ -56,7 +74,9 @@ export default function Otp() {
               name="pin"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-base font-medium text-foreground">One-Time Password</FormLabel>
+                  <FormLabel className="text-base font-medium text-foreground">
+                    One-Time Password
+                  </FormLabel>
                   <FormControl>
                     <InputOTP maxLength={6} {...field}>
                       <InputOTPGroup>
@@ -78,12 +98,12 @@ export default function Otp() {
               )}
             />
 
-            <Button type="submit" className="w-full">
-              Submit
+            <Button type="submit" className="w-full" disabled={verifyOtpMutation.isPending}>
+              {verifyOtpMutation.isPending ? "Verifying..." : "Submit"}
             </Button>
           </form>
         </Form>
       </div>
     </div>
-  )
+  );
 }

@@ -21,6 +21,7 @@ app.get("/clearToken", (req, res) => {
   console.log("Token cleared successfully");
 });
 
+
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
 });

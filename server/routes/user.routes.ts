@@ -7,6 +7,7 @@ import { eq, or } from "drizzle-orm";
 import { generateToken } from "../functions/tokenGenerator";
 import bcrypt from "bcryptjs";
 import { authenticateToken } from "../middlewares/jwtauth";
+import { sendOtpMail } from "../functions/mailer";
 const router = Router();
 
 router.post(
@@ -29,11 +30,13 @@ router.post(
         return res.status(400).send("User already exists with this username");
       }
       const hashedPassword = await bcrypt.hash(req.body.password.trim(), 10);
+      const otp = Math.floor(100000 + Math.random() * 900000);
       const newUser = await Mydb.insert(users)
         .values({
           username: req.body.username.trim(),
           email: req.body.email.trim(),
           passwordHash: hashedPassword,
+          otp: otp,
         })
         .returning({
           id: users.id,
@@ -54,6 +57,8 @@ router.post(
       res
         .status(200)
         .json({ message: "Registration successful", user: newUser[0] });
+
+      await sendOtpMail(newUser[0].email, otp);
     } catch (error) {
       console.error("Error during registration:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -130,6 +135,43 @@ router.get("/auth/getuser", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Error in /checkUser route:", error);
     res.status(500).send("Internal server error");
+  }
+});
+
+router.post("/auth/verifyOtp", authenticateToken, async (req, res) => {
+  try {
+    const { otp } = req.body;
+    if (!otp || typeof otp !== "number") {
+      return res.status(400).send("Invalid OTP");
+    }
+
+    const user = await Mydb.select()
+      .from(users)
+      .where(eq(users.id, req.userId));
+
+    if (user.length === 0) {
+      return res.status(400).send("Invalid OTP or user not found");
+    }
+
+    // Update user's email verification status
+    const verifiedUser = await Mydb.update(users)
+      .set({ isEmailVerified: true })
+      .where(eq(users.id, user[0].id))
+      .returning({
+        id: users.id,
+        email: users.email,
+        username: users.username,
+        name: users.name,
+        avatar: users.avatar,
+        isEmailVerified: users.isEmailVerified,
+      });
+
+    res
+      .status(200)
+      .json({ message: "OTP verified successfully", user: verifiedUser[0] });
+  } catch (error) {
+    console.error("Error verifying OTP:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 

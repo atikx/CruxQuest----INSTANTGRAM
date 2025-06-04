@@ -22,6 +22,7 @@ export const users = pgTable(
       "https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg"
     ),
     aboutMe: text("aboutMe"),
+    otp: integer("otp"),
     isEmailVerified: boolean("isEmailVerified").default(false),
     createdAt: timestamp("createdAt").defaultNow(),
   },
