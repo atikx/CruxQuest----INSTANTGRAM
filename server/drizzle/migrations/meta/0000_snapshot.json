@@ -1,5 +1,5 @@
 {
-  "id": "d732a0dd-e59b-43e2-8171-2f35e74bf49d",
+  "id": "1a2af2f0-d360-4e97-8029-762d329f4608",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -462,7 +462,7 @@
           "name": "passwordHash",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "name": {
           "name": "name",
@@ -474,7 +474,8 @@
           "name": "profilePictureUrl",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg'"
         },
         "aboutMe": {
           "name": "aboutMe",

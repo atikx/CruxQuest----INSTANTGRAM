@@ -34,13 +34,14 @@ const navItems = [
   { path: "/friends", icon: Users, label: "Friends" },
   { path: "/settings", icon: Settings, label: "Settings" },
 ];
+import { useAuthStore } from "@/lib/store";
 
 export default function AppNavbar() {
   const location = useLocation();
   const currentPath = location.pathname;
   const [searchQuery, setSearchQuery] = useState("");
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-
+  const user = useAuthStore((state) => state.user);
   const handleSearch = () => {
     console.log("Search for:", searchQuery);
     // Add navigation or API call here
@@ -185,11 +186,16 @@ export default function AppNavbar() {
           <div className="flex gap-4 items-center">
             <Avatar className="w-7 h-7 sm:w-8 sm:h-8">
               <AvatarImage
-                src="https://avatars.githubusercontent.com/u/100670938?s=400&u=bec078ea0257560ee91f1992ffc1b2125b83b6dd&v=4"
+                src={
+                  user?.avatar ||
+                  "https://avatars.githubusercontent.com/u/100670938?s=https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg&u=bec078ea0257560ee91f1992ffc1b2125b83b6dd&v=4"
+                }
                 alt="profile"
               />
             </Avatar>
-            <h1 className="text-xl font-semibold text-foreground">Atiksh</h1>
+            <h1 className="text-xl font-semibold text-foreground">
+              {user?.name?.split(" ")[0] || user?.username?.split(" ")[0] || "Guest"}
+            </h1>
           </div>
         </div>
       </div>

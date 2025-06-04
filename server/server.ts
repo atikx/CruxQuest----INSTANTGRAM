@@ -15,6 +15,12 @@ app.use(cookieParser());
 app.use("/user", userRoutes);
 app.use("/verifiedUser", verifiedUserRoutes);
 
+app.get("/clearToken", (req, res) => {
+  res.clearCookie("token");
+  res.status(200).json({ message: "Token cleared successfully" });
+  console.log("Token cleared successfully");
+});
+
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
 });

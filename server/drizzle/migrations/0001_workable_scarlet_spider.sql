@@ -1,2 +1,0 @@
-ALTER TABLE "users" ALTER COLUMN "email" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "users" ALTER COLUMN "profilePictureUrl" SET DEFAULT 'https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg';

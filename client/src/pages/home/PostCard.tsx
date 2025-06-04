@@ -22,8 +22,6 @@ interface User {
   location: string;
 }
 
-
-
 interface Post {
   id: number;
   user: User;
@@ -95,9 +93,6 @@ export function PostCard({ post }: PostCardProps) {
                 )}
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="w-3 h-3" />
-                <span>{post.user.location}</span>
-                <span>•</span>
                 <span>{post.timestamp}</span>
               </div>
             </div>

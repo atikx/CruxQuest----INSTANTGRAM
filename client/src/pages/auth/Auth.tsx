@@ -9,12 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-
+import { useNavigate } from "react-router-dom";
 import authImg from "@/assets/images/authImg.png";
 import { TrainFrontTunnel } from "lucide-react";
 import { toast } from "sonner";
 
+import { useAuthStore } from "@/lib/store";
+
 export default function LoginPage() {
+
+  const setUser = useAuthStore((state) => state.setUser);
+  const navigate = useNavigate();
   useEffect(() => {
     AOS.init({
       duration: 400,
@@ -64,7 +69,8 @@ export default function LoginPage() {
       });
       if (res.status === 200) {
         toast.success(res.data.message);
-        console.log(res.data.user);
+        setUser(res.data.user); // Set user in the store
+        navigate("/"); // Redirect to home page after successful login
       }
     } catch (error: any) {
       console.error("Error during login:", error);
@@ -87,6 +93,8 @@ export default function LoginPage() {
       });
       if (res.status === 200) {
         toast.success("Sign Up successful", {});
+        setUser(res.data.user); // Set user in the store
+        navigate("/"); // Redirect to home page after successful signup
       }
     } catch (error: any) {
       console.error("Error during signup:", error);

@@ -2,12 +2,11 @@ import { AbilityBuilder, createMongoAbility } from "@casl/ability";
 
 export interface UserInterface {
   id: string;
-  name: string;
   email: string;
-  isadmin: boolean;
+  username: string;
+  name: string;
   avatar: string;
-  is_verified: boolean;
-  created_at: string;
+  isEmailVerified: boolean;
 }
 
 const defineAbilityFor = (user: UserInterface) => {
