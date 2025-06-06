@@ -38,6 +38,7 @@ const Root = () => {
       <Router>
         <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
           <Toaster />
+
           <AppNavbar />
           <App />
         </ThemeProvider>

@@ -175,4 +175,33 @@ router.post("/auth/verifyOtp", authenticateToken, async (req, res) => {
   }
 });
 
+router.get("/sendOtp", authenticateToken, async (req: any, res: any) => {
+  try {
+    const { userId } = req;
+    // const otp = Math.floor(100000 + Math.random() * 900000);
+    const user = await Mydb.update(users)
+      .set({
+        otp: Math.floor(100000 + Math.random() * 900000),
+      })
+      .where(eq(users.id, userId))
+      .returning({
+        otp: users.otp,
+        email: users.email,
+      });
+
+    if (user.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    const otp = user[0].otp;
+
+    res.status(200).json({
+      message: "OTP sent successfully",
+    });
+    otp && (await sendOtpMail(user[0].email, otp));
+  } catch (error) {
+    console.error("❌ Error in /sendOtp:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 export default router;

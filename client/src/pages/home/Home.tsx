@@ -1,5 +1,10 @@
 import { PostCard } from "./PostCard";
 import postImg from "@/assets/images/postImg.png";
+import api from "@/lib/axiosinstance";
+import { useMutation } from "@tanstack/react-query";
+import { useAuthStore } from "@/lib/store";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const samplePosts = [
   {
@@ -59,6 +64,82 @@ const samplePosts = [
 ];
 
 export default function Home() {
+  const user = useAuthStore((state) => state.user);
+  const navigate = useNavigate();
+
+  const emailVerificationMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.get("/user/sendOtp");
+      return res.data;
+    },
+  });
+
+  const handleEmailVerification = async () => {
+    try {
+      const data = await emailVerificationMutation.mutateAsync();
+      console.log(data);
+      toast.success("Verification email sent successfully!", {
+        description: "Please check your inbox and spam folder.",
+      });
+      navigate("/otp");
+    } catch (error) {
+      console.error("Error resending verification email:", error);
+      toast.error("Failed to resend verification email.", {
+        description: "Please try again later.",
+      });
+    }
+  };
+
+  if (!user?.isEmailVerified) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
+        <div className="bg-card border border-border rounded-lg p-6 max-w-md mx-auto shadow-sm">
+          <div className="flex items-center justify-center w-12 h-12 bg-muted rounded-full mx-auto mb-4">
+            <svg
+              className="w-6 h-6 text-muted-foreground"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-card-foreground mb-2">
+            Email Verification Required
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Please verify your email address to access this feature and continue
+            using our platform.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={handleEmailVerification}
+              disabled={emailVerificationMutation.isPending}
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {emailVerificationMutation.isPending ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                "Resend Verification Email"
+              )}
+            </button>
+            <p className="text-sm text-muted-foreground">
+              Check your inbox and spam folder for the verification link.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap gap-8 md:gap-4 lg:gap-8 px-8 md:px-4 lg:px-8">
       {samplePosts.map((post) => (

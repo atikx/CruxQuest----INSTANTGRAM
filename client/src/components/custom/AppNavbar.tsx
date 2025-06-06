@@ -1,6 +1,6 @@
 import {
   Home,
-  Users,
+  User,
   Settings,
   TrainFrontTunnel,
   Search,
@@ -27,13 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useState } from "react";
-const navItems = [
-  { path: "/home", icon: Home, label: "Home" },
-  { path: "/explore", icon: Compass, label: "Explore" },
-  { path: "/newPost", icon: CirclePlus, label: "New Post" },
-  { path: "/friends", icon: Users, label: "Friends" },
-  { path: "/settings", icon: Settings, label: "Settings" },
-];
+
 import { useAuthStore } from "@/lib/store";
 
 export default function AppNavbar() {
@@ -46,6 +40,18 @@ export default function AppNavbar() {
     console.log("Search for:", searchQuery);
     // Add navigation or API call here
   };
+
+  const navItems = [
+    { path: "/home", icon: Home, label: "Home" },
+    { path: "/explore", icon: Compass, label: "Explore" },
+    ...(user?.isEmailVerified
+      ? [
+          { path: "/newPost", icon: CirclePlus, label: "New Post" },
+          { path: "/Profile", icon: User, label: "Profile" },
+        ]
+      : []),
+    { path: "/settings", icon: Settings, label: "Settings" },
+  ];
 
   const closeSheet = () => {
     setIsSheetOpen(false);

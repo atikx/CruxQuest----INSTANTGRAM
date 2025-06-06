@@ -12,21 +12,16 @@ export interface UserInterface {
 const defineAbilityFor = (user: UserInterface) => {
   const { can, build } = new AbilityBuilder(createMongoAbility);
 
-  if (!user) {
-    can("read", "post"); // read-only access to posts
-    can("read", "comment"); // read-only access to comments
-    return build();
-  }
-
-  if (user.isadmin) {
-    can("manage", "all"); // read-write access to everything
-  } else if (user.is_verified) {
-    can("read", "all"); // read-only access to everything
-    can("like", "post"); // can like posts
-    can("comment", "post"); // can comment on posts
-    can("create", "comment"); // can create comments
-    can("subscribe", "author"); // can subscribe to author
-    can("like", "post")
+  
+ if (user.isEmailVerified) {
+    can("read", "all"); 
+    can("like", "post");
+    can("comment", "post");
+    can("create", "comment"); 
+    can("create", "post"); 
+    can("send", "friendRequest"); 
+    can("accept", "friendRequest"); 
+    can("reject", "friendRequest"); 
   } else {
     can("read", "post"); // read-only access to posts
   }
