@@ -115,6 +115,23 @@ export default function AppNavbar() {
 
         {/* Right side - Mobile menu button + Avatar */}
         <div className="ml-auto flex items-center space-x-2 sm:space-x-3">
+          {/* Avatar */}
+          <div className="flex gap-4 items-center">
+            <Avatar className="w-7 h-7 sm:w-8 sm:h-8">
+              <AvatarImage
+                src={
+                  user?.avatar ||
+                  "https://avatars.githubusercontent.com/u/100670938?s=https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg&u=bec078ea0257560ee91f1992ffc1b2125b83b6dd&v=4"
+                }
+                alt="profile"
+              />
+            </Avatar>
+            <h1 className="text-xl font-semibold text-foreground">
+              {user?.name?.split(" ")[0] ||
+                user?.username?.split(" ")[0] ||
+                "Guest"}
+            </h1>
+          </div>
           {/* Mobile Sheet Menu - visible only on mobile/tablet */}
           <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
             <SheetTrigger asChild>
@@ -181,22 +198,6 @@ export default function AppNavbar() {
               </div>
             </SheetContent>
           </Sheet>
-
-          {/* Avatar */}
-          <div className="flex gap-4 items-center">
-            <Avatar className="w-7 h-7 sm:w-8 sm:h-8">
-              <AvatarImage
-                src={
-                  user?.avatar ||
-                  "https://avatars.githubusercontent.com/u/100670938?s=https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg&u=bec078ea0257560ee91f1992ffc1b2125b83b6dd&v=4"
-                }
-                alt="profile"
-              />
-            </Avatar>
-            <h1 className="text-xl font-semibold text-foreground">
-              {user?.name?.split(" ")[0] || user?.username?.split(" ")[0] || "Guest"}
-            </h1>
-          </div>
         </div>
       </div>
     </TooltipProvider>

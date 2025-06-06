@@ -6,13 +6,8 @@ const samplePosts = [
     id: 1,
     user: {
       name: "Sarah Johnson",
-      username: "sarah_j",
       avatar:
         "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face",
-      isVerified: true,
-      isPro: true,
-      isOnline: true,
-      location: "San Francisco, CA",
     },
     content:
       "Just finished an amazing hiking trip in Yosemite! The views were absolutely breathtaking and the weather was perfect. Can't wait to go back next month!",
@@ -21,27 +16,14 @@ const samplePosts = [
     timestamp: "2 hours ago",
     engagement: {
       likes: 142,
-      comments: 23,
-      shares: 8,
-      reactions: [
-        { type: "like", emoji: "❤️", color: "bg-red-500" },
-        { type: "love", emoji: "😍", color: "bg-pink-500" },
-        { type: "wow", emoji: "😮", color: "bg-yellow-500" },
-      ],
     },
   },
   {
     id: 2,
     user: {
       name: "Alex Rodriguez",
-      username: "alex_dev",
       avatar:
         "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-
-      isVerified: false,
-      isPro: false,
-      isOnline: false,
-      location: "Austin, TX",
     },
     content:
       "Working on a new React project today. The component architecture is coming together nicely! Love how clean the code looks with TypeScript.",
@@ -54,25 +36,14 @@ const samplePosts = [
     timestamp: "4 hours ago",
     engagement: {
       likes: 89,
-      comments: 12,
-      shares: 5,
-      reactions: [
-        { type: "like", emoji: "👍", color: "bg-blue-500" },
-        { type: "fire", emoji: "🔥", color: "bg-orange-500" },
-      ],
     },
   },
   {
     id: 3,
     user: {
       name: "Maya Patel",
-      username: "maya_foodie",
       avatar:
         "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop&crop=face",
-      isVerified: true,
-      isPro: false,
-      isOnline: true,
-      location: "Mumbai, India",
     },
     content:
       "Tried making homemade pasta for the first time and it turned out amazing! The secret is definitely in the quality of the ingredients and taking your time with the dough.",
@@ -83,13 +54,6 @@ const samplePosts = [
     timestamp: "6 hours ago",
     engagement: {
       likes: 256,
-      comments: 34,
-      shares: 15,
-      reactions: [
-        { type: "love", emoji: "😍", color: "bg-pink-500" },
-        { type: "yum", emoji: "😋", color: "bg-green-500" },
-        { type: "fire", emoji: "🔥", color: "bg-orange-500" },
-      ],
     },
   },
 ];
