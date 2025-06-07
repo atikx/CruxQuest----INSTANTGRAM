@@ -1,19 +1,18 @@
-import e, { Router } from "express";
+import { Router } from "express";
 import { authenticateVerifiedUserToken } from "../middlewares/jwtauth";
 import { Mydb } from "../drizzle/db";
-import { friendRequests, users } from "../drizzle/schema";
+import { friendRequests, likes, users } from "../drizzle/schema";
 import { and, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { saveImgOnDisk } from "../middlewares/multer.middleware";
 import { uploadOnCloudinary } from "../functions/imageUploader";
-import fs, { stat } from "fs";
+import fs from "fs";
 import { posts } from "../drizzle/schema";
 import { postImages } from "../drizzle/schema";
 import { postTags } from "../drizzle/schema";
 import { tags } from "../drizzle/schema";
+import { comments } from "../drizzle/schema";
 import bcrypt from "bcryptjs";
-import { sendOtpMail } from "../functions/mailer";
 import { count } from "drizzle-orm";
-import { create } from "domain";
 const router = Router();
 
 router.use(authenticateVerifiedUserToken);
@@ -595,7 +594,9 @@ router.put("/updateProfile", async (req: any, res: any) => {
 router.get("/getFriendPosts", async (req: any, res: any) => {
   try {
     const userId = req.verifiedUser.id;
-    const oneDayAgoISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const oneDayAgoISO = new Date(
+      Date.now() - 24 * 60 * 60 * 1000
+    ).toISOString();
 
     const result = await Mydb.execute(sql`
       SELECT 
@@ -603,9 +604,15 @@ router.get("/getFriendPosts", async (req: any, res: any) => {
         p."userId",
         p."description",
         p."createdAt",
+        u."avatar",
+        u."username",
+        u."name",
+        u."id" AS "userId",
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT pi."imageUrl"), NULL) AS "imageUrls",
-        ARRAY_REMOVE(ARRAY_AGG(DISTINCT t."name"), NULL) AS "tags"
+        ARRAY_REMOVE(ARRAY_AGG(DISTINCT t."name"), NULL) AS "tags",
+        COUNT(DISTINCT l."userId") AS "likeCount" -- Count of unique users who liked the post
       FROM "posts" p
+      JOIN "users" u ON u."id" = p."userId"
       JOIN "friendRequests" fr
         ON (
           (fr."fromUser" = ${userId} AND fr."toUser" = p."userId") OR
@@ -614,9 +621,10 @@ router.get("/getFriendPosts", async (req: any, res: any) => {
       LEFT JOIN "postImages" pi ON pi."postId" = p."id"
       LEFT JOIN "postTags" pt ON pt."postId" = p."id"
       LEFT JOIN "tags" t ON t."id" = pt."tagId"
+      LEFT JOIN "likes" l ON l."postId" = p."id"  -- join likes to count them
       WHERE fr."status" = 'accepted'
         AND p."createdAt" > ${oneDayAgoISO}
-      GROUP BY p."id", p."userId", p."description", p."createdAt"
+      GROUP BY p."id", p."userId", p."description", p."createdAt", u."avatar", u."username", u."name", u."id"
       ORDER BY p."createdAt" DESC;
     `);
 
@@ -630,5 +638,164 @@ router.get("/getFriendPosts", async (req: any, res: any) => {
   }
 });
 
+router.get("/getComments/:postId", async (req: any, res: any) => {
+  try {
+    const postId = req.params.postId;
+    if (!postId) {
+      return res.status(400).json({ message: "No post ID" });
+    }
+
+    // Fetch comments for the post
+    const comments = await Mydb.query.posts.findMany({
+      where: (posts, { eq }) => eq(posts.id, postId),
+      columns: {
+        id: true,
+      },
+      with: {
+        comments: {
+          columns: {
+            id: true,
+            parentId: true,
+            content: true,
+            createdAt: true,
+          },
+          with: {
+            user: {
+              columns: {
+                id: true,
+                username: true,
+                name: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (comments.length === 0 || !comments[0].comments) {
+      return res.status(404).json({ message: "Post not found or no comments" });
+    }
+
+    return res.status(200).json({
+      message: "Comments fetched successfully",
+      comments: comments,
+    });
+
+    if (comments.length === 0) {
+      return res.status(404).json({ message: "Post not found or no comments" });
+    }
+
+    return res.status(200).json({
+      message: "Comments fetched successfully",
+      comments: comments[0].comments,
+    });
+  } catch (error) {
+    console.error("❌ Error in /getComments:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+router.get("/getPost/:postId", async (req: any, res: any) => {
+  try {
+    const postId = req.params.postId;
+    if (!postId) {
+      return res.status(400).json({ message: "No post ID provided" });
+    }
+
+    // Fetch the post with its images, tags, and user details
+    const post = await Mydb.query.posts.findFirst({
+      where: (posts, { eq }) => eq(posts.id, postId),
+      with: {
+        images: {
+          columns: {
+            imageUrl: true,
+          },
+        },
+        tags: {
+          with: {
+            tag: {
+              columns: {
+                name: true,
+              },
+            },
+          },
+        },
+        user: {
+          columns: {
+            id: true,
+            username: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    // Fetch like count
+    const likeCountResult = await Mydb.select({ count: sql<number>`count(*)` })
+      .from(likes)
+      .where(eq(likes.postId, postId));
+
+    const likeCount = likeCountResult[0]?.count ?? 0;
+
+    return res.status(200).json({
+      message: "Post fetched successfully",
+      post: {
+        ...post,
+        likeCount,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error in /getPost:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+router.post("/addComment", async (req: any, res: any) => {
+  try {
+    const { postId, content, parentId } = req.body;
+    const userId = req.verifiedUser.id;
+
+    if (!postId || !content) {
+      return res
+        .status(400)
+        .json({ message: "Post ID and content are required" });
+    }
+
+    // Insert the comment into the database
+    const newComment = await Mydb.insert(comments)
+      .values({
+        userId: userId,
+        postId: postId,
+        content: content.trim(),
+        parentId: parentId || null, // Allow parentId to be optional
+      })
+      .returning({
+        id: comments.id,
+        userId: comments.userId,
+        postId: comments.postId,
+        content: comments.content,
+          createdAt: comments.createdAt,
+          parentId: comments.parentId,
+        
+      });
+    if (newComment.length === 0) {
+      return res.status(500).json({ message: "Failed to add comment" });
+    }
+
+    return res.status(201).json({
+      message: "Comment added successfully",
+      comment: newComment[0],
+    });
+  } catch (error) {
+    console.error("❌ Error in /addComment:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
 export default router;

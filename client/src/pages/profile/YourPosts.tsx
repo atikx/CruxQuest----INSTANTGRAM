@@ -22,6 +22,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface Post {
   id: string;
@@ -33,7 +34,7 @@ interface Post {
 export default function YourPosts() {
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
-
+  const nagigate = useNavigate();
   const {
     data: posts = [],
     isLoading,
@@ -232,7 +233,12 @@ export default function YourPosts() {
                   <span className="text-sm font-medium">Like</span>
                 </button>
 
-                <button className="flex items-center gap-2 text-muted-foreground hover:text-blue-500 transition-all duration-200 hover:scale-105">
+                <button
+                  className="flex items-center gap-2 text-muted-foreground hover:text-blue-500 transition-all duration-200 hover:scale-105"
+                  onClick={() => {
+                    nagigate(`/post/${post.id}`);
+                  }}
+                >
                   <MessageCircle className="w-5 h-5" />
                   <span className="text-sm font-medium">Comment</span>
                 </button>

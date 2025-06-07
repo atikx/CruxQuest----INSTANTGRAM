@@ -9,7 +9,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   passwordHash: text("passwordHash"),
   name: text("name"),
-  avatar: text("profilePictureUrl").default("https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg"),
+  avatar: text("avatar").default("https://img.freepik.com/premium-photo/anime-male-avatar_950633-956.jpg"),
   aboutMe: text("aboutMe"),
   otp: integer("otp"),
   isEmailVerified: boolean("isEmailVerified").default(false),

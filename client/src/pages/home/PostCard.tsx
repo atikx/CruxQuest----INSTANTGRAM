@@ -11,21 +11,17 @@ import {
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-interface User {
-  name: string;
-  avatar: string;
-}
-
 interface Post {
-  id: number;
-  user: User;
-  content: string;
-  hashtags: string[];
-  images: string[];
-  timestamp: string;
-  engagement: {
-    likes: number;
-  };
+  id: string;
+  userId: string;
+  description: string;
+  createdAt: string;
+  avatar: string;
+  username: string;
+  name: string;
+  imageUrls: string[];
+  tags: string[];
+  likeCount: string;
 }
 
 interface PostCardProps {
@@ -44,10 +40,28 @@ export function PostCard({ post }: PostCardProps) {
 
   const getInitials = (name: string) => {
     return name
-      .split(" ")
+      ?.split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase();
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return (
+      date.toLocaleDateString() +
+      " " +
+      date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+  };
+
+  const formatHashtags = (tags: string[]) => {
+    return tags.map((tag) => `#${tag}`).join(" ");
+  };
+
+  // Helper function to get display name
+  const getDisplayName = () => {
+    return post.name?.trim() || post.username || "Anonymous";
   };
 
   // Hardcoded reactions
@@ -64,17 +78,17 @@ export function PostCard({ post }: PostCardProps) {
         {/* Header */}
         <div className="flex items-center gap-3 p-4 pb-3">
           <Avatar className="ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
-            <AvatarImage src={post.user.avatar} />
+            <AvatarImage src={post.avatar} />
             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-              {getInitials(post.user.name)}
+              {post.name?.trim() ? getInitials(post.name) : getInitials(post.username || "")}
             </AvatarFallback>
           </Avatar>
           <div>
             <span className="font-semibold text-foreground">
-              {post.user.name}
+              {getDisplayName()}
             </span>
             <div className="text-sm text-muted-foreground">
-              {post.timestamp}
+              {formatTimestamp(post.createdAt)}
             </div>
           </div>
         </div>
@@ -82,17 +96,17 @@ export function PostCard({ post }: PostCardProps) {
         {/* Content */}
         <div className="px-4 h-20 pb-3">
           <p className="text-foreground leading-relaxed">
-            {post.content}{" "}
-            <span className="text-primary">{post.hashtags.join(" ")}</span>
+            {post.description}{" "}
+            <span className="text-primary">{formatHashtags(post.tags)}</span>
           </p>
         </div>
 
         {/* Image Carousel */}
-        {post.images && post.images.length > 0 && (
+        {post.imageUrls && post.imageUrls.length > 0 && (
           <div className="relative group px-4">
             <Carousel className="w-full">
               <CarouselContent>
-                {post.images.map((image, index) => (
+                {post.imageUrls.map((image, index) => (
                   <CarouselItem key={index}>
                     <div className="relative overflow-hidden">
                       <img
@@ -106,7 +120,7 @@ export function PostCard({ post }: PostCardProps) {
                 ))}
               </CarouselContent>
 
-              {post.images.length > 1 && (
+              {post.imageUrls.length > 1 && (
                 <>
                   <CarouselPrevious className="absolute top-1/2 left-3 -translate-y-1/2 h-10 w-10 bg-white/40 hover:bg-white/60 border-0 backdrop-blur-sm" />
                   <CarouselNext className="absolute top-1/2 right-3 -translate-y-1/2 h-10 w-10 bg-white/40 hover:bg-white/60 border-0 backdrop-blur-sm" />
@@ -133,7 +147,7 @@ export function PostCard({ post }: PostCardProps) {
                     </div>
                   ))}
                 </div>
-                <span className="ml-2">{post.engagement.likes} likes</span>
+                <span className="ml-2">{post.likeCount} likes</span>
               </span>
             </div>
           </div>

@@ -5,18 +5,40 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import api from "@/lib/axiosinstance";
+import { toast } from "sonner";
+import { useAuthStore } from "@/lib/store";
 
 interface User {
-  name: string;
+  id: string;
+  username: string;
+  name: string | null;
   avatar: string;
 }
 
+interface ServerComment {
+  id: string;
+  parentId: string | null;
+  content: string;
+  createdAt: string;
+  user: User;
+}
+
+interface ServerResponse {
+  message: string;
+  comments: Array<{
+    id: string;
+    comments: ServerComment[];
+  }>;
+}
+
 interface NestedComment {
-  id: number;
+  id: string;
   user: User;
   content: string;
   timestamp: string;
-  parent_id?: number | null;
+  parent_id?: string | null;
   children?: NestedComment[];
 }
 
@@ -24,81 +46,46 @@ interface PostDetailCommentsProps {
   postId: number;
 }
 
-// Sample data for demonstration (removed likes and isLiked properties)
-const sampleComments: NestedComment[] = [
-  {
-    id: 1,
-    user: {
-      name: "John Doe",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
-    },
-    content: "Great post! Thanks for sharing this amazing content. The photos are absolutely stunning!",
-    timestamp: "2 hours ago",
-    parent_id: null,
-    children: [
-      {
-        id: 2,
-        user: {
-          name: "Jane Smith",
-          avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face",
-        },
-        content: "I totally agree! The composition is perfect.",
-        timestamp: "1 hour ago",
-        parent_id: 1,
-        children: []
-      },
-      {
-        id: 3,
-        user: {
-          name: "Mike Johnson",
-          avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face",
-        },
-        content: "Where was this taken? I'd love to visit this place!",
-        timestamp: "45 minutes ago",
-        parent_id: 1,
-        children: []
-      }
-    ]
-  },
-  {
-    id: 4,
-    user: {
-      name: "Sarah Wilson",
-      avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face",
-    },
-    content: "This is incredible! The lighting and colors are so vibrant. What camera did you use?",
-    timestamp: "3 hours ago",
-    parent_id: null,
-    children: [
-      {
-        id: 5,
-        user: {
-          name: "Alex Brown",
-          avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-        },
-        content: "Looks like it was shot with a professional DSLR. The depth of field is amazing!",
-        timestamp: "2 hours ago",
-        parent_id: 4,
-        children: []
-      }
-    ]
-  },
-  {
-    id: 6,
-    user: {
-      name: "Emma Davis",
-      avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop&crop=face",
-    },
-    content: "Beautiful shot! The way you captured the natural light is phenomenal. Keep up the great work! 📸✨",
-    timestamp: "4 hours ago",
-    parent_id: null,
-    children: []
-  }
-];
+// Transform server data to component format
+function transformServerComments(serverData: ServerResponse): NestedComment[] {
+  const allComments: NestedComment[] = [];
+
+  serverData.comments.forEach((postComments) => {
+    postComments.comments.forEach((comment) => {
+      allComments.push({
+        id: comment.id,
+        user: comment.user,
+        content: comment.content,
+        timestamp: formatTimestamp(comment.createdAt),
+        parent_id: comment.parentId,
+        children: [],
+      });
+    });
+  });
+
+  return allComments;
+}
+
+// Format timestamp to relative time
+function formatTimestamp(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffInMs = now.getTime() - date.getTime();
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  const diffInDays = Math.floor(diffInHours / 24);
+
+  if (diffInMinutes < 1) return "Just now";
+  if (diffInMinutes < 60)
+    return `${diffInMinutes} minute${diffInMinutes > 1 ? "s" : ""} ago`;
+  if (diffInHours < 24)
+    return `${diffInHours} hour${diffInHours > 1 ? "s" : ""} ago`;
+  return `${diffInDays} day${diffInDays > 1 ? "s" : ""} ago`;
+}
 
 // Build comment tree structure
 function buildCommentTree(comments: NestedComment[]): NestedComment[] {
-  const map = new Map<number, NestedComment>();
+  const map = new Map<string, NestedComment>();
   const roots: NestedComment[] = [];
 
   comments.forEach((comment) => {
@@ -120,27 +107,40 @@ function buildCommentTree(comments: NestedComment[]): NestedComment[] {
   return roots;
 }
 
-// Comment Form Component
+// Comment Form Component with Auth Store Integration
 const CommentForm = ({
   onSubmit,
   onCancel,
   placeholder = "Add a comment...",
   isReply = false,
+  isLoading = false,
 }: {
   onSubmit: (content: string) => void;
   onCancel?: () => void;
   placeholder?: string;
   isReply?: boolean;
+  isLoading?: boolean;
 }) => {
   const [content, setContent] = useState("");
+  const user = useAuthStore((state) => state.user);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) return;
+    if (!content.trim() || isLoading) return;
 
     onSubmit(content.trim());
     setContent("");
     if (onCancel) onCancel();
+  };
+
+  const getInitials = (user: any) => {
+    if (!user) return "U";
+    const displayName = user.name || user.username || "User";
+    return displayName
+      .split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase();
   };
 
   return (
@@ -148,9 +148,9 @@ const CommentForm = ({
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="flex gap-3">
           <Avatar className="w-8 h-8 flex-shrink-0">
-            <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face" />
+            <AvatarImage src={user?.avatar || ""} />
             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs">
-              Y
+              {getInitials(user)}
             </AvatarFallback>
           </Avatar>
 
@@ -160,20 +160,21 @@ const CommentForm = ({
               onChange={(e) => setContent(e.target.value)}
               placeholder={placeholder}
               className="min-h-[80px] resize-none"
+              disabled={isLoading}
             />
           </div>
         </div>
 
         <div className="flex justify-end gap-2 ml-11">
           {onCancel && (
-            <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+            <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isLoading}>
               <X className="w-4 h-4 mr-1" />
               Cancel
             </Button>
           )}
-          <Button type="submit" size="sm" disabled={!content.trim()}>
+          <Button type="submit" size="sm" disabled={!content.trim() || isLoading}>
             <Send className="w-4 h-4 mr-1" />
-            {isReply ? "Reply" : "Comment"}
+            {isLoading ? "Posting..." : isReply ? "Reply" : "Comment"}
           </Button>
         </div>
       </form>
@@ -181,15 +182,17 @@ const CommentForm = ({
   );
 };
 
-// Individual Comment Component (removed onLike prop and like functionality)
+// Individual Comment Component
 const CommentCard = ({
   comment,
   depth = 0,
   onReply,
+  isReplying = false,
 }: {
   comment: NestedComment;
   depth?: number;
-  onReply: (parentId: number, content: string) => void;
+  onReply: (parentId: string, content: string) => void;
+  isReplying?: boolean;
 }) => {
   const [showReplyForm, setShowReplyForm] = useState(false);
   const maxDepth = 3;
@@ -199,12 +202,17 @@ const CommentCard = ({
     setShowReplyForm(false);
   };
 
-  const getInitials = (name: string) => {
-    return name
+  const getInitials = (user: User) => {
+    const displayName = user.name || user.username;
+    return displayName
       .split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase();
+  };
+
+  const getDisplayName = (user: User) => {
+    return user.name || user.username;
   };
 
   return (
@@ -213,35 +221,46 @@ const CommentCard = ({
         <div className="absolute -left-8 top-0 w-px h-full bg-border opacity-30" />
       )}
 
-      <Card className={`${depth > 0 ? "bg-muted/30" : "bg-background"} border-0 shadow-sm py-3`}>
+      <Card
+        className={`${
+          depth > 0 ? "bg-muted/30" : "bg-background"
+        } border-0 shadow-sm py-3`}
+      >
         <CardContent className="">
           <div className="flex gap-3">
             <Avatar className="w-8 h-8 flex-shrink-0">
               <AvatarImage src={comment.user.avatar} />
               <AvatarFallback className="bg-gradient-to-br from-gray-500 to-gray-600 text-white text-xs">
-                {getInitials(comment.user.name)}
+                {getInitials(comment.user)}
               </AvatarFallback>
             </Avatar>
 
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-semibold text-sm">{comment.user.name}</span>
-                <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
+                <span className="font-semibold text-sm">
+                  {getDisplayName(comment.user)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  @{comment.user.username}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {comment.timestamp}
+                </span>
               </div>
 
               <div className="text-sm text-foreground/90 mb-3">
                 {comment.content}
               </div>
 
-              {/* Removed like button, only keeping reply button */}
               <div className="flex items-center gap-4">
                 {depth < maxDepth && (
                   <button
                     onClick={() => setShowReplyForm(!showReplyForm)}
                     className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={isReplying}
                   >
                     <Reply className="w-3 h-3" />
-                    Reply
+                    {isReplying ? "Replying..." : "Reply"}
                   </button>
                 )}
               </div>
@@ -254,8 +273,9 @@ const CommentCard = ({
         <CommentForm
           onSubmit={handleReply}
           onCancel={() => setShowReplyForm(false)}
-          placeholder={`Reply to ${comment.user.name}...`}
+          placeholder={`Reply to ${getDisplayName(comment.user)}...`}
           isReply={true}
+          isLoading={isReplying}
         />
       )}
 
@@ -267,6 +287,7 @@ const CommentCard = ({
               comment={child}
               depth={depth + 1}
               onReply={onReply}
+              isReplying={isReplying}
             />
           ))}
         </div>
@@ -275,7 +296,8 @@ const CommentCard = ({
       {comment.children && comment.children.length > 0 && depth >= maxDepth && (
         <div className="ml-8 mt-3">
           <Button variant="ghost" size="sm" className="text-xs text-primary">
-            View {comment.children.length} more {comment.children.length === 1 ? "reply" : "replies"}
+            View {comment.children.length} more{" "}
+            {comment.children.length === 1 ? "reply" : "replies"}
           </Button>
         </div>
       )}
@@ -283,51 +305,119 @@ const CommentCard = ({
   );
 };
 
-// Main Comments Component (removed like functionality)
+// Main Comments Component
 export default function Comments({ postId }: PostDetailCommentsProps) {
-  const [comments, setComments] = useState<NestedComment[]>(sampleComments);
   const [showAddComment, setShowAddComment] = useState(false);
+  const user = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient();
+
+  // Fetch comments using useQuery
+  const {
+    data: comments = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ['comments', postId],
+    queryFn: async () => {
+      const response = await api.get(`/verifiedUser/getComments/${postId}`);
+      return transformServerComments(response.data);
+    },
+    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
+    refetchOnWindowFocus: false,
+  });
+
+  // Add comment mutation
+  const addCommentMutation = useMutation({
+    mutationFn: async ({ content, parentId }: { content: string; parentId?: string | null }) => {
+      const response = await api.post(`/verifiedUser/addComment/`, {
+        postId,
+        content,
+        parentId: parentId || null,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      // Invalidate and refetch comments
+      queryClient.invalidateQueries({ queryKey: ['comments', postId] });
+      toast.success("Comment added successfully!");
+      setShowAddComment(false);
+    },
+    onError: (error) => {
+      console.error("Error adding comment:", error);
+      toast.error("Failed to add comment. Please try again.");
+    },
+  });
+
+  // Reply mutation
+  const replyMutation = useMutation({
+    mutationFn: async ({ content, parentId }: { content: string; parentId: string }) => {
+      const response = await api.post(`/verifiedUser/addComment/`, {
+        postId,
+        content,
+        parentId,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', postId] });
+      toast.success("Reply added successfully!");
+    },
+    onError: (error) => {
+      console.error("Error adding reply:", error);
+      toast.error("Failed to add reply. Please try again.");
+    },
+  });
+
+  const handleAddComment = (content: string) => {
+    addCommentMutation.mutate({ content });
+  };
+
+  const handleReply = (parentId: string, content: string) => {
+    replyMutation.mutate({ content, parentId });
+  };
 
   const nestedComments = buildCommentTree(comments);
   const totalComments = comments.length;
 
-  const handleAddComment = (content: string) => {
-    const newComment: NestedComment = {
-      id: Date.now(),
-      user: {
-        name: "You",
-        avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-      },
-      content,
-      timestamp: "Just now",
-      parent_id: null,
-      children: []
-    };
+  if (isLoading) {
+    return (
+      <div className="p-0 relative">
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </div>
+    );
+  }
 
-    setComments([...comments, newComment]);
-    setShowAddComment(false);
-  };
-
-  const handleReply = (parentId: number, content: string) => {
-    const newReply: NestedComment = {
-      id: Date.now(),
-      user: {
-        name: "You",
-        avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-      },
-      content,
-      timestamp: "Just now",
-      parent_id: parentId,
-      children: []
-    };
-
-    setComments([...comments, newReply]);
-  };
+  if (isError) {
+    return (
+      <div className="p-0 relative">
+        <div className="flex items-center justify-center py-8">
+          <div className="text-center">
+            <MessageCircle className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-muted-foreground mb-2">
+              Failed to load comments
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {error instanceof Error ? error.message : "Something went wrong"}
+            </p>
+            <Button 
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['comments', postId] })}
+              variant="outline"
+            >
+              Try again
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className=" p-0 relative">
+    <div className="p-0 relative">
       {/* Header */}
-      <div className="flex  top-0 z-20 items-center justify-between  pb-4">
+      <div className="flex items-center justify-between pb-4">
         <div className="flex items-center gap-2">
           <MessageCircle className="w-5 h-5 text-primary" />
           <h2 className="text-xl font-bold">Comments</h2>
@@ -340,6 +430,7 @@ export default function Comments({ postId }: PostDetailCommentsProps) {
           variant="outline"
           size="sm"
           onClick={() => setShowAddComment(!showAddComment)}
+          disabled={addCommentMutation.isPending}
         >
           <MessageCircle className="w-4 h-4 mr-2" />
           Add Comment
@@ -352,6 +443,7 @@ export default function Comments({ postId }: PostDetailCommentsProps) {
           onSubmit={handleAddComment}
           onCancel={() => setShowAddComment(false)}
           placeholder="Share your thoughts..."
+          isLoading={addCommentMutation.isPending}
         />
       )}
 
@@ -363,10 +455,11 @@ export default function Comments({ postId }: PostDetailCommentsProps) {
               key={comment.id}
               comment={comment}
               onReply={handleReply}
+              isReplying={replyMutation.isPending}
             />
           ))
         ) : (
-          <div className="text-center ">
+          <div className="text-center py-8">
             <MessageCircle className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-muted-foreground mb-2">
               No comments yet
@@ -374,7 +467,10 @@ export default function Comments({ postId }: PostDetailCommentsProps) {
             <p className="text-sm text-muted-foreground mb-4">
               Be the first to share your thoughts!
             </p>
-            <Button onClick={() => setShowAddComment(true)}>
+            <Button 
+              onClick={() => setShowAddComment(true)}
+              disabled={addCommentMutation.isPending}
+            >
               <MessageCircle className="w-4 h-4 mr-2" />
               Start the conversation
             </Button>

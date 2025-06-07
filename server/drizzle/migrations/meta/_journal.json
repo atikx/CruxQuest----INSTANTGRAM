@@ -15,6 +15,13 @@
       "when": 1749024374999,
       "tag": "0001_daily_jackal",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1749313164294,
+      "tag": "0002_fine_bushwacker",
+      "breakpoints": true
     }
   ]
 }

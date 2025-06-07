@@ -9,44 +9,67 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import Comments from './Comments';
+import Comments from "./Comments";
+import api from "@/lib/axiosinstance";
 
 interface User {
+  id: string;
+  username: string;
   name: string;
   avatar: string;
 }
 
-interface Comment {
-  id: number;
-  user: User;
-  content: string;
-  timestamp: string;
+interface Image {
+  imageUrl: string;
 }
 
-interface Post {
-  id: number;
-  user: User;
-  content: string;
-  hashtags: string[];
-  images: string[];
-  timestamp: string;
-  engagement: {
-    likes: number;
+interface Tag {
+  postId: string;
+  tagId: number;
+  tag: {
+    name: string;
   };
 }
 
+interface Post {
+  id: string;
+  userId: string;
+  description: string;
+  createdAt: string;
+  images: Image[];
+  tags: Tag[];
+  user: User;
+  likeCount: number;
+}
+
 interface PostDetailPageProps {
-  posts: Post[];
+  posts?: Post[];
 }
 
 export default function PostDetail({ posts }: PostDetailPageProps) {
   const navigate = useNavigate();
   const { id } = useParams();
   const [isLiked, setIsLiked] = useState(false);
+  const [post, setPost] = useState<Post | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const post = posts.find((p) => p.id === parseInt(id || "0"));
+  const fetchPostDetails = async () => {
+    try {
+      const res = await api.get(`/verifiedUser/getPost/${id}`);
+      setPost(res.data.post);
+      console.log("Post details fetched:", res.data.post);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching post details:", error);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPostDetails();
+  }, [id]);
 
   const handleLike = () => setIsLiked(!isLiked);
   const handleBack = () => navigate(-1);
@@ -59,12 +82,27 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
       .toUpperCase();
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
+
   const reactions = [
     { type: "like", emoji: "❤️", color: "bg-red-500" },
     { type: "love", emoji: "😍", color: "bg-pink-500" },
     { type: "laugh", emoji: "😂", color: "bg-yellow-500" },
     { type: "wow", emoji: "😮", color: "bg-blue-500" },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-2">Loading...</h1>
+        </div>
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -107,7 +145,7 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
               {post.images.length === 1 ? (
                 <div className="w-full h-full flex items-center justify-center">
                   <img
-                    src={post.images[0]}
+                    src={post.images[0].imageUrl}
                     alt="Post image"
                     className="w-full h-full object-cover"
                     style={{
@@ -126,7 +164,7 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
                         >
                           <div className="w-full h-full flex items-center justify-center">
                             <img
-                              src={image}
+                              src={image.imageUrl}
                               alt={`Post image ${index + 1}`}
                               className="w-full h-full object-cover"
                               style={{
@@ -154,21 +192,21 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
               <Avatar className="w-8 h-8 flex-shrink-0">
                 <AvatarImage src={post.user.avatar} />
                 <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs">
-                  {getInitials(post.user.name)}
+                  {getInitials(post.user.name || post.user.username)}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1">
                 <span className="font-semibold text-sm mr-2">
-                  {post.user.name}
+                  {post.user.name || post.user.username}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  {post.timestamp}
+                  {formatDate(post.createdAt)}
                 </span>
                 <br />
-                <span className="text-sm">{post.content}</span>
-                {post.hashtags.length > 0 && (
+                <span className="text-sm">{post.description}</span>
+                {post.tags.length > 0 && (
                   <span className="text-primary text-sm mt-2">
-                    {post.hashtags.join(" ")}
+                    {post.tags.map(tag => `#${tag.tag.name}`).join(" ")}
                   </span>
                 )}
               </div>
@@ -189,7 +227,7 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
                 ))}
               </div>
               <span className="font-semibold">
-                {post.engagement.likes} likes
+                {post?.likeCount} likes
               </span>
             </div>
 
@@ -206,7 +244,6 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
                 <Heart className={`w-6 h-6 ${isLiked ? "fill-current" : ""}`} />
                 <span className="font-medium">Like</span>
               </button>
-              
             </div>
           </div>
 
@@ -214,8 +251,6 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
           <div className="flex-1 overflow-y-auto p-4">
             <Comments postId={post.id} />
           </div>
-
-          
         </div>
       </div>
     </div>
