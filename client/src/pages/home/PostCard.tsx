@@ -108,8 +108,8 @@ export function PostCard({ post }: PostCardProps) {
 
               {post.images.length > 1 && (
                 <>
-                  <CarouselPrevious className="absolute top-1/2 left-3 -translate-y-1/2 h-10 w-10 bg-black/40 hover:bg-black/60 border-0 backdrop-blur-sm" />
-                  <CarouselNext className="absolute top-1/2 right-3 -translate-y-1/2 h-10 w-10 bg-black/40 hover:bg-black/60 border-0 backdrop-blur-sm" />
+                  <CarouselPrevious className="absolute top-1/2 left-3 -translate-y-1/2 h-10 w-10 bg-white/40 hover:bg-white/60 border-0 backdrop-blur-sm" />
+                  <CarouselNext className="absolute top-1/2 right-3 -translate-y-1/2 h-10 w-10 bg-white/40 hover:bg-white/60 border-0 backdrop-blur-sm" />
                 </>
               )}
             </Carousel>

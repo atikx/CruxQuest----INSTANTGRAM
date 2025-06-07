@@ -10,9 +10,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { X, Upload, Image as ImageIcon, Plus } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { X, Upload, Image as ImageIcon, Plus, AlertTriangle } from "lucide-react";
 import api from "@/lib/axiosinstance";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface PostImage {
   file: File;
@@ -31,7 +42,9 @@ export default function NewPost() {
   const [description, setDescription] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
 
   // Create post mutation function
   const createPost = async (postData: PostData) => {
@@ -39,16 +52,6 @@ export default function NewPost() {
     formData.append("description", postData.description.trim());
     formData.append("tags", JSON.stringify(postData.tags));
     postData.images.forEach((img) => formData.append("images", img));
-
-    // Debug: log the FormData entries
-    console.log("FormData Preview:");
-    for (const [key, value] of formData.entries()) {
-      if (key === "images" && value instanceof File) {
-        console.log(key, value.name, value.type, value.size);
-      } else {
-        console.log(key, value);
-      }
-    }
 
     const response = await api.post("/verifiedUser/addNewPost", formData);
     return response.data;
@@ -60,11 +63,7 @@ export default function NewPost() {
     onSuccess: (data) => {
       console.log("✅ Post created successfully:", data);
       toast.success("Post created successfully!");
-      // Reset form
-      setImages([]);
-      setDescription("");
-      setTags([]);
-      setTagInput("");
+      navigate("/yourProfile");
     },
     onError: (error: any) => {
       console.error("❌ Error submitting post:", error);
@@ -74,6 +73,23 @@ export default function NewPost() {
     },
   });
 
+  // Handle form submission with confirmation
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowConfirmDialog(true);
+  };
+
+  // Handle confirmed submission
+  const handleConfirmedSubmit = () => {
+    setShowConfirmDialog(false);
+    mutation.mutate({
+      description,
+      tags,
+      images: images.map((img) => img.file),
+    });
+  };
+
+  // ... rest of your existing functions (onDrop, handleImageUpload, etc.)
   const onDrop = useCallback((acceptedFiles: File[]) => {
     acceptedFiles.forEach((file) => {
       if (file.type.startsWith("image/")) {
@@ -94,10 +110,10 @@ export default function NewPost() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif']
+      "image/*": [".png", ".jpg", ".jpeg", ".gif"],
     },
     multiple: true,
-    maxSize: 10 * 1024 * 1024 // 10MB
+    maxSize: 10 * 1024 * 1024, // 10MB
   });
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -145,16 +161,6 @@ export default function NewPost() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    mutation.mutate({
-      description,
-      tags,
-      images: images.map(img => img.file)
-    });
-  };
-
   return (
     <div className="max-w-2xl mx-auto p-6">
       <Card>
@@ -169,7 +175,7 @@ export default function NewPost() {
             {/* Image Upload Section */}
             <div className="space-y-4">
               <Label htmlFor="images">Images</Label>
-              
+
               {/* Image Preview Grid */}
               {images.length > 0 && (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -206,7 +212,9 @@ export default function NewPost() {
                 <input {...getInputProps()} />
                 <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
                 {isDragActive ? (
-                  <p className="text-sm text-blue-600">Drop the images here...</p>
+                  <p className="text-sm text-blue-600">
+                    Drop the images here...
+                  </p>
                 ) : (
                   <>
                     <p className="text-sm text-gray-600 mb-1">
@@ -274,25 +282,18 @@ export default function NewPost() {
               )}
             </div>
 
-            {/* Error Display */}
-            {mutation.isError && (
-              <div className="text-red-600 text-sm">
-                {mutation.error?.message || "An error occurred"}
-              </div>
-            )}
-
-            {/* Submit Button with Loading Spinner */}
-            <Button 
-              type="submit" 
-              className="w-full" 
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              className="w-full"
               disabled={mutation.isPending}
             >
               {mutation.isPending ? (
                 <div className="flex items-center gap-2">
-                  <ClipLoader 
-                    color="#ffffff" 
-                    loading={mutation.isPending} 
-                    size={20} 
+                  <ClipLoader
+                    color="#ffffff"
+                    loading={mutation.isPending}
+                    size={20}
                   />
                   Creating Post...
                 </div>
@@ -303,6 +304,27 @@ export default function NewPost() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Confirmation AlertDialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              Confirm Post Creation
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to create this post? This action will publish your content and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmedSubmit}>
+              Create Post
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import NewPost from "./pages/newPost/NewPost";
 import UserProtected from "./pages/protected/UserProtected";
 import PostDetailPage from "./pages/postDetail/PostDetail";
 import postImg from "@/assets/images/postImg.png";
+import YourProfile from "./pages/profile/YourProfile";
 
 const samplePosts = [
   {
@@ -73,6 +74,7 @@ function App() {
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="/newPost" element={<NewPost />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/yourProfile" element={<YourProfile />} />
         <Route
           path="/post/:id"
           element={<PostDetailPage posts={samplePosts} />}

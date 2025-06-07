@@ -47,7 +47,7 @@ export default function AppNavbar() {
     ...(user?.isEmailVerified
       ? [
           { path: "/newPost", icon: CirclePlus, label: "New Post" },
-          { path: "/Profile", icon: User, label: "Profile" },
+          { path: "/yourProfile", icon: User, label: "Profile" },
         ]
       : []),
     { path: "/settings", icon: Settings, label: "Settings" },

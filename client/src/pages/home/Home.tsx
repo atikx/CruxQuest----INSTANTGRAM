@@ -5,6 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useAuthStore } from "@/lib/store";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 const samplePosts = [
   {
@@ -139,6 +140,22 @@ export default function Home() {
       </div>
     );
   }
+
+  const getFriendPosts = async () => {
+    try {
+      const res = await api.get("/verifiedUser/getFriendPosts");
+      console.log(res.data);
+    } catch (error) {
+      console.error("Error fetching friend posts:", error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    if (user?.isEmailVerified) {
+      getFriendPosts();
+    }
+  }, []);
 
   return (
     <div className="flex flex-wrap gap-8 md:gap-4 lg:gap-8 px-8 md:px-4 lg:px-8">
