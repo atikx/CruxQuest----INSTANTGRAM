@@ -18,6 +18,7 @@ import { inArray, gte, and } from "drizzle-orm";
 import serviceAccount from "../config/fire-base.json" assert { type: "json" };
 import admin from "firebase-admin";
 import { sendOtpMail } from "../functions/mailer";
+import redis from "../redisClient";
 
 const router = Router();
 
@@ -303,9 +304,20 @@ router.get(
 
       const offset = (page - 1) * limit;
 
+      // Redis Caching: only for page 1
+      const isCacheable = page === 1;
+      const cacheKey = `explore:${sort}:${timeFilter}:${tags.join(",") || "all"}`;
+
+      if (isCacheable) {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          console.log("🔁 Returning cached explore data");
+          return res.status(200).json(JSON.parse(cached));
+        }
+      }
+
       let whereConditions: any[] = [];
 
-      // Time filter logic
       if (timeFilter !== "All Time") {
         const now = new Date();
         let timeThreshold: Date;
@@ -326,10 +338,10 @@ router.get(
           default:
             timeThreshold = new Date(0);
         }
+
         whereConditions.push(gte(posts.createdAt, timeThreshold));
       }
 
-      // Tag filtering logic
       let filteredPostIds: string[] = [];
       if (tags.length > 0) {
         const tagRecords = await Mydb.query.tags.findMany({
@@ -360,7 +372,6 @@ router.get(
         }
       }
 
-      // Get total posts count for pagination
       const totalPosts = await Mydb.query.posts.findMany({
         where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
       });
@@ -368,7 +379,6 @@ router.get(
       let postsData;
 
       if (sort === "New") {
-        // Simple query for new posts
         postsData = await Mydb.query.posts.findMany({
           where:
             whereConditions.length > 0 ? and(...whereConditions) : undefined,
@@ -400,7 +410,6 @@ router.get(
           },
         });
       } else {
-        // For Top, Hot, and Controversial, we need custom queries with aggregations
         const baseQuery = Mydb.select({
           id: posts.id,
           description: posts.description,
@@ -432,7 +441,6 @@ router.get(
               .offset(offset);
             break;
           case "Hot":
-            // Hot algorithm: likes per hour since creation
             sortedPosts = await baseQuery
               .orderBy(
                 desc(sql`
@@ -448,7 +456,6 @@ router.get(
               .offset(offset);
             break;
           case "Controversial":
-            // Controversial: high comment to like ratio
             sortedPosts = await baseQuery
               .orderBy(
                 desc(sql`
@@ -467,9 +474,7 @@ router.get(
             break;
         }
 
-        // Now fetch full post data for the sorted post IDs
         const postIds = sortedPosts.map((p) => p.id);
-
         postsData = await Mydb.query.posts.findMany({
           where: inArray(posts.id, postIds),
           with: {
@@ -497,7 +502,6 @@ router.get(
           },
         });
 
-        // Maintain the sort order
         const postOrderMap = new Map(
           sortedPosts.map((p, index) => [p.id, index])
         );
@@ -508,7 +512,6 @@ router.get(
 
       const postIds = postsData.map((p) => p.id);
 
-      // Get aggregated counts
       const likesCounts = await Mydb.select({
         postId: likes.postId,
         count: sql`COUNT(*)`.mapWith(Number),
@@ -541,7 +544,7 @@ router.get(
       const totalItems = totalPosts.length;
       const totalPages = Math.ceil(totalItems / limit);
 
-      return res.status(200).json({
+      const responsePayload = {
         message: "Posts fetched successfully",
         posts: postsWithCounts,
         pagination: {
@@ -552,7 +555,14 @@ router.get(
           hasPreviousPage: page > 1,
           limit,
         },
-      });
+      };
+
+      if (isCacheable) {
+        await redis.set(cacheKey, JSON.stringify(responsePayload), { EX: 300 }); // 5 minutes
+        console.log("📦 Cached explore data in Redis");
+      }
+
+      return res.status(200).json(responsePayload);
     } catch (error) {
       console.error("Error fetching posts:", error);
       return res.status(500).json({ message: "Internal server error" });
