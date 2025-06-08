@@ -851,7 +851,7 @@ router.post("/likePost/:postId", async (req: any, res: any) => {
       totalLikes: count,
     });
 
-    if (count == 1 || count == 100 || count == 1000) {
+    if (count == 10 || count == 100 || count == 1000) {
       console.log(`Milestone reached: ${count} likes for post ${postId}`);
       // get author with join
       const [result] = await Mydb.select({
