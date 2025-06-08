@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Comments from "./Comments";
 import api from "@/lib/axiosinstance";
+import { toast } from "sonner";
 
 interface User {
   id: string;
@@ -42,27 +43,32 @@ interface Post {
   tags: Tag[];
   user: User;
   likeCount: number;
+  isLiked: boolean;
 }
 
-interface PostDetailPageProps {
-  posts?: Post[];
-}
 
-export default function PostDetail({ posts }: PostDetailPageProps) {
+
+export default function PostDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [isLiked, setIsLiked] = useState(false);
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
+  const [likeCount, setLikeCount] = useState(0);
+  const [isLikeLoading, setIsLikeLoading] = useState(false);
 
   const fetchPostDetails = async () => {
     try {
       const res = await api.get(`/verifiedUser/getPost/${id}`);
-      setPost(res.data.post);
-      console.log("Post details fetched:", res.data.post);
+      const postData = res.data.post;
+      setPost(postData);
+      setIsLiked(postData.isLiked);
+      setLikeCount(parseInt(postData.likeCount) || 0);
+      console.log("Post details fetched:", postData);
       setLoading(false);
     } catch (error) {
       console.error("Error fetching post details:", error);
+      toast.error("Failed to load post details");
       setLoading(false);
     }
   };
@@ -71,7 +77,92 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
     fetchPostDetails();
   }, [id]);
 
-  const handleLike = () => setIsLiked(!isLiked);
+  const handleLike = async () => {
+    if (isLikeLoading) return;
+    
+    setIsLikeLoading(true);
+    
+    // Store previous state for rollback
+    const previousIsLiked = isLiked;
+    const previousLikeCount = likeCount;
+    
+    // Optimistic update
+    setIsLiked(true);
+    setLikeCount(prevCount => prevCount + 1);
+
+    try {
+      const res = await api.post(`/verifiedUser/likePost/${id}`);
+      
+      if (res.status === 200) {
+        // Update with server response if available
+        if (res.data.likeCount !== undefined) {
+          setLikeCount(parseInt(res.data.likeCount));
+        }
+        if (res.data.isLiked !== undefined) {
+          setIsLiked(res.data.isLiked);
+        }
+        
+        toast.success(res.data.message || "Post liked successfully!");
+        console.log(res.data);
+      }
+    } catch (error: any) {
+      console.error("Error liking post:", error);
+      
+      // Rollback optimistic update
+      setIsLiked(previousIsLiked);
+      setLikeCount(previousLikeCount);
+      
+      toast.error("Failed to like post. Please try again.", {
+        description: error.response?.data?.message || "Network error occurred",
+      });
+    } finally {
+      setIsLikeLoading(false);
+    }
+  };
+
+  const handleUnLike = async () => {
+    if (isLikeLoading) return;
+    
+    setIsLikeLoading(true);
+    
+    // Store previous state for rollback
+    const previousIsLiked = isLiked;
+    const previousLikeCount = likeCount;
+    
+    // Optimistic update
+    setIsLiked(false);
+    setLikeCount(prevCount => Math.max(0, prevCount - 1));
+
+    try {
+      const res = await api.post(`/verifiedUser/unlikePost/${id}`);
+      
+      if (res.status === 200) {
+        // Update with server response if available
+        if (res.data.likeCount !== undefined) {
+          setLikeCount(parseInt(res.data.likeCount));
+        }
+        if (res.data.isLiked !== undefined) {
+          setIsLiked(res.data.isLiked);
+        }
+        
+        toast.success(res.data.message || "Post unliked successfully!");
+        console.log(res.data);
+      }
+    } catch (error: any) {
+      console.error("Error unliking post:", error);
+      
+      // Rollback optimistic update
+      setIsLiked(previousIsLiked);
+      setLikeCount(previousLikeCount);
+      
+      toast.error("Failed to unlike post. Please try again.", {
+        description: error.response?.data?.message || "Network error occurred",
+      });
+    } finally {
+      setIsLikeLoading(false);
+    }
+  };
+
   const handleBack = () => navigate(-1);
 
   const getInitials = (name: string) => {
@@ -206,7 +297,7 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
                 <span className="text-sm">{post.description}</span>
                 {post.tags.length > 0 && (
                   <span className="text-primary text-sm mt-2">
-                    {post.tags.map(tag => `#${tag.tag.name}`).join(" ")}
+                    {post.tags.map((tag) => `#${tag.tag.name}`).join(" ")}
                   </span>
                 )}
               </div>
@@ -226,23 +317,28 @@ export default function PostDetail({ posts }: PostDetailPageProps) {
                   </div>
                 ))}
               </div>
-              <span className="font-semibold">
-                {post?.likeCount} likes
-              </span>
+              <span className="font-semibold">{likeCount} likes</span>
             </div>
 
             {/* Action Buttons */}
             <div className="flex gap-6">
               <button
-                onClick={handleLike}
-                className={`flex items-center gap-2 transition-all duration-200 hover:scale-105 ${
+                onClick={isLiked ? handleUnLike : handleLike}
+                disabled={isLikeLoading}
+                className={`flex items-center gap-2 transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                   isLiked
                     ? "text-red-500"
                     : "text-muted-foreground hover:text-red-500"
                 }`}
               >
-                <Heart className={`w-6 h-6 ${isLiked ? "fill-current" : ""}`} />
-                <span className="font-medium">Like</span>
+                <Heart 
+                  className={`w-6 h-6 ${isLiked ? "fill-current" : ""} ${
+                    isLikeLoading ? "animate-pulse" : ""
+                  }`} 
+                />
+                <span className="font-medium">
+                  {isLikeLoading ? "..." : isLiked ? "Liked" : "Like"}
+                </span>
               </button>
             </div>
           </div>

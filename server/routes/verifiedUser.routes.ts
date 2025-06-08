@@ -13,6 +13,7 @@ import { tags } from "../drizzle/schema";
 import { comments } from "../drizzle/schema";
 import bcrypt from "bcryptjs";
 import { count } from "drizzle-orm";
+import { sendMilestoneMail } from "../functions/mailer";
 const router = Router();
 
 router.use(authenticateVerifiedUserToken);
@@ -594,9 +595,7 @@ router.put("/updateProfile", async (req: any, res: any) => {
 router.get("/getFriendPosts", async (req: any, res: any) => {
   try {
     const userId = req.verifiedUser.id;
-    const oneDayAgoISO = new Date(
-      Date.now() - 24 * 60 * 60 * 1000
-    ).toISOString();
+    const oneDayAgoISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     const result = await Mydb.execute(sql`
       SELECT 
@@ -610,7 +609,17 @@ router.get("/getFriendPosts", async (req: any, res: any) => {
         u."id" AS "userId",
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT pi."imageUrl"), NULL) AS "imageUrls",
         ARRAY_REMOVE(ARRAY_AGG(DISTINCT t."name"), NULL) AS "tags",
-        COUNT(DISTINCT l."userId") AS "likeCount" -- Count of unique users who liked the post
+        COUNT(DISTINCT l."userId") AS "likeCount",
+        -- 👇 Compute if current user liked the post
+        CASE 
+          WHEN EXISTS (
+            SELECT 1 
+            FROM "likes" l2 
+            WHERE l2."postId" = p."id" AND l2."userId" = ${userId}
+          )
+          THEN true
+          ELSE false
+        END AS "isLiked"
       FROM "posts" p
       JOIN "users" u ON u."id" = p."userId"
       JOIN "friendRequests" fr
@@ -621,10 +630,12 @@ router.get("/getFriendPosts", async (req: any, res: any) => {
       LEFT JOIN "postImages" pi ON pi."postId" = p."id"
       LEFT JOIN "postTags" pt ON pt."postId" = p."id"
       LEFT JOIN "tags" t ON t."id" = pt."tagId"
-      LEFT JOIN "likes" l ON l."postId" = p."id"  -- join likes to count them
+      LEFT JOIN "likes" l ON l."postId" = p."id"
       WHERE fr."status" = 'accepted'
         AND p."createdAt" > ${oneDayAgoISO}
-      GROUP BY p."id", p."userId", p."description", p."createdAt", u."avatar", u."username", u."name", u."id"
+      GROUP BY 
+        p."id", p."userId", p."description", p."createdAt", 
+        u."avatar", u."username", u."name", u."id"
       ORDER BY p."createdAt" DESC;
     `);
 
@@ -637,6 +648,7 @@ router.get("/getFriendPosts", async (req: any, res: any) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 });
+
 
 router.get("/getComments/:postId", async (req: any, res: any) => {
   try {
@@ -743,11 +755,19 @@ router.get("/getPost/:postId", async (req: any, res: any) => {
 
     const likeCount = likeCountResult[0]?.count ?? 0;
 
+    // Fetch already liked status by the current user
+    const alreadyLiked = await Mydb.select()
+      .from(likes)
+      .where(
+        and(eq(likes.postId, postId), eq(likes.userId, req.verifiedUser.id))
+      );
+    const isLiked = alreadyLiked.length > 0;
     return res.status(200).json({
       message: "Post fetched successfully",
       post: {
         ...post,
         likeCount,
+        isLiked,
       },
     });
   } catch (error) {
@@ -780,9 +800,8 @@ router.post("/addComment", async (req: any, res: any) => {
         userId: comments.userId,
         postId: comments.postId,
         content: comments.content,
-          createdAt: comments.createdAt,
-          parentId: comments.parentId,
-        
+        createdAt: comments.createdAt,
+        parentId: comments.parentId,
       });
     if (newComment.length === 0) {
       return res.status(500).json({ message: "Failed to add comment" });
@@ -794,6 +813,102 @@ router.post("/addComment", async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("❌ Error in /addComment:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+router.post("/likePost/:postId", async (req: any, res: any) => {
+  try {
+    const postId = req.params.postId;
+    const userId = req.verifiedUser.id;
+
+    console.log("Like request for postId:", postId, "by userId:", userId);
+
+    // Insert like
+    const newLike = await Mydb.insert(likes)
+      .values({
+        postId: postId,
+        userId: userId,
+      })
+      .returning({
+        id: likes.userId,
+      });
+
+    if (newLike.length === 0) {
+      return res.status(400).json({ message: "Failed to like post" });
+    }
+
+    // Count total likes for the post
+    const [{ count }] = await Mydb.select({
+      count: sql<number>`COUNT(*)`,
+    })
+      .from(likes)
+      .where(sql`"postId" = ${postId}`);
+
+    res.status(200).json({
+      message: "Post liked successfully",
+      totalLikes: count,
+    });
+
+    if (count == 1 || count == 100 || count == 1000) {
+      console.log(`Milestone reached: ${count} likes for post ${postId}`);
+      // get author with join
+      const [result] = await Mydb.select({
+        email: users.email,
+        name: users.name,
+        username: users.username,
+      })
+        .from(posts)
+        .innerJoin(users, eq(posts.userId, users.id))
+        .where(eq(posts.id, postId));
+
+      if (result?.email) {
+        await sendMilestoneMail(
+          result.email,
+          result.name || result.username,
+          postId,
+          count
+        );
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error in /likePost:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+router.post("/unlikePost/:postId", async (req: any, res: any) => {
+  try {
+    const postId = req.params.postId;
+    const userId = req.verifiedUser.id;
+
+
+    // Delete like
+    const deletedLike = await Mydb.delete(likes)
+      .where(
+        and(eq(likes.postId, postId), eq(likes.userId, userId))
+      )
+      .returning({
+        id: likes.userId,
+      });
+
+    if (deletedLike.length === 0) {
+      return res.status(400).json({ message: "Failed to unlike post" });
+    }
+
+    // Count total likes for the post
+    const [{ count }] = await Mydb.select({
+      count: sql<number>`COUNT(*)`,
+    })
+      .from(likes)
+      .where(sql`"postId" = ${postId}`);
+
+    res.status(200).json({
+      message: "Post unliked successfully",
+      totalLikes: count,
+    });
+  } catch (error) {
+    console.error("❌ Error in /unlikePost:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 });

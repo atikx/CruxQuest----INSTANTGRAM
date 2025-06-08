@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/carousel";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "@/lib/axiosinstance";
+import { toast } from "sonner";
 
 interface Post {
   id: string;
@@ -22,6 +24,7 @@ interface Post {
   imageUrls: string[];
   tags: string[];
   likeCount: string;
+  isLiked: boolean;
 }
 
 interface PostCardProps {
@@ -30,9 +33,95 @@ interface PostCardProps {
 
 export function PostCard({ post }: PostCardProps) {
   const navigate = useNavigate();
-  const [isLiked, setIsLiked] = useState(false);
+  const [isLiked, setIsLiked] = useState(post.isLiked);
+  const [likeCount, setLikeCount] = useState(parseInt(post.likeCount) || 0);
+  const [isLikeLoading, setIsLikeLoading] = useState(false);
 
-  const handleLike = () => setIsLiked(!isLiked);
+  const handleLike = async () => {
+    if (isLikeLoading) return;
+
+    setIsLikeLoading(true);
+
+    // Store previous state for rollback
+    const previousIsLiked = isLiked;
+    const previousLikeCount = likeCount;
+
+    // Optimistic update
+    setIsLiked(true);
+    setLikeCount((prevCount) => prevCount + 1);
+
+    try {
+      const res = await api.post(`/verifiedUser/likePost/${post.id}`);
+
+      if (res.status === 200) {
+        // Update with server response if available
+        if (res.data.likeCount !== undefined) {
+          setLikeCount(parseInt(res.data.likeCount));
+        }
+        if (res.data.isLiked !== undefined) {
+          setIsLiked(res.data.isLiked);
+        }
+
+        toast.success(res.data.message || "Post liked successfully!");
+        console.log(res.data);
+      }
+    } catch (error: any) {
+      console.error("Error liking post:", error);
+
+      // Rollback optimistic update
+      setIsLiked(previousIsLiked);
+      setLikeCount(previousLikeCount);
+
+      toast.error("Failed to like post. Please try again.", {
+        description: error.response?.data?.message || "Network error occurred",
+      });
+    } finally {
+      setIsLikeLoading(false);
+    }
+  };
+
+  const handleUnLike = async () => {
+    if (isLikeLoading) return;
+
+    setIsLikeLoading(true);
+
+    // Store previous state for rollback
+    const previousIsLiked = isLiked;
+    const previousLikeCount = likeCount;
+
+    // Optimistic update
+    setIsLiked(false);
+    setLikeCount((prevCount) => Math.max(0, prevCount - 1));
+
+    try {
+      const res = await api.post(`/verifiedUser/unlikePost/${post.id}`);
+
+      if (res.status === 200) {
+        // Update with server response if available
+        if (res.data.likeCount !== undefined) {
+          setLikeCount(parseInt(res.data.likeCount));
+        }
+        if (res.data.isLiked !== undefined) {
+          setIsLiked(res.data.isLiked);
+        }
+
+        toast.success(res.data.message || "Post unliked successfully!");
+        console.log(res.data);
+      }
+    } catch (error: any) {
+      console.error("Error unliking post:", error);
+
+      // Rollback optimistic update
+      setIsLiked(previousIsLiked);
+      setLikeCount(previousLikeCount);
+
+      toast.error("Failed to unlike post. Please try again.", {
+        description: error.response?.data?.message || "Network error occurred",
+      });
+    } finally {
+      setIsLikeLoading(false);
+    }
+  };
 
   const handleCommentClick = () => {
     navigate(`/post/${post.id}`);
@@ -56,7 +145,15 @@ export function PostCard({ post }: PostCardProps) {
   };
 
   const formatHashtags = (tags: string[]) => {
-    return tags.map((tag) => `#${tag}`).join(" ");
+    return tags.map((tag, index) => (
+      <span
+        key={index}
+        className="cursor-pointer transition-colors"
+        onClick={() => navigate(`/explore/filter?tag=${encodeURIComponent(tag)}`)}
+      >
+        #{tag}
+      </span>
+    ));
   };
 
   // Helper function to get display name
@@ -80,7 +177,9 @@ export function PostCard({ post }: PostCardProps) {
           <Avatar className="ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
             <AvatarImage src={post.avatar} />
             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-              {post.name?.trim() ? getInitials(post.name) : getInitials(post.username || "")}
+              {post.name?.trim()
+                ? getInitials(post.name)
+                : getInitials(post.username || "")}
             </AvatarFallback>
           </Avatar>
           <div>
@@ -147,7 +246,7 @@ export function PostCard({ post }: PostCardProps) {
                     </div>
                   ))}
                 </div>
-                <span className="ml-2">{post.likeCount} likes</span>
+                <span className="ml-2">{likeCount} likes</span>
               </span>
             </div>
           </div>
@@ -156,15 +255,22 @@ export function PostCard({ post }: PostCardProps) {
         {/* Actions */}
         <div className="flex gap-6 p-4">
           <button
-            onClick={handleLike}
-            className={`flex items-center gap-2 transition-all duration-200 hover:scale-105 ${
+            onClick={isLiked ? handleUnLike : handleLike}
+            disabled={isLikeLoading}
+            className={`flex items-center gap-2 transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
               isLiked
                 ? "text-red-500"
                 : "text-muted-foreground hover:text-red-500"
             }`}
           >
-            <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
-            <span className="text-sm font-medium">Like</span>
+            <Heart
+              className={`w-5 h-5 ${isLiked ? "fill-current" : ""} ${
+                isLikeLoading ? "animate-pulse" : ""
+              }`}
+            />
+            <span className="text-sm font-medium">
+              {isLikeLoading ? "..." : isLiked ? "Liked" : "Like"}
+            </span>
           </button>
 
           <button

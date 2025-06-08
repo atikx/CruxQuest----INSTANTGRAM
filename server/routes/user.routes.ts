@@ -2,11 +2,20 @@ import { Router } from "express";
 import { zodValidater } from "../middlewares/zodValidator";
 import * as userSchemas from "../schemaValidator/user.validator";
 import { Mydb } from "../drizzle/db";
-import { users } from "../drizzle/schema";
-import { eq, or } from "drizzle-orm";
+import {
+  comments,
+  likes,
+  posts,
+  postTags,
+  tags,
+  users,
+} from "../drizzle/schema";
+import { eq, or, sql, desc } from "drizzle-orm";
 import { generateToken } from "../functions/tokenGenerator";
 import bcrypt from "bcryptjs";
 import { authenticateToken } from "../middlewares/jwtauth";
+import { inArray, gte, and } from "drizzle-orm";
+
 import { sendOtpMail } from "../functions/mailer";
 const router = Router();
 
@@ -203,5 +212,774 @@ router.get("/sendOtp", authenticateToken, async (req: any, res: any) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 });
+
+router.get(
+  "/getPostsToExplore",
+  authenticateToken,
+  async (req: any, res: any) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 9;
+      const timeFilter = req.query.timeFilter || "All Time";
+      const sort = req.query.sort || "New";
+      const tags = req.query.tags
+        ? (req.query.tags as string).split(",").filter(Boolean)
+        : [];
+
+      if (page < 1) {
+        return res.status(400).json({ message: "Page must be greater than 0" });
+      }
+      if (limit < 1 || limit > 100) {
+        return res
+          .status(400)
+          .json({ message: "Limit must be between 1 and 100" });
+      }
+
+      const offset = (page - 1) * limit;
+
+      let whereConditions: any[] = [];
+
+      // Time filter logic
+      if (timeFilter !== "All Time") {
+        const now = new Date();
+        let timeThreshold: Date;
+
+        switch (timeFilter) {
+          case "Last 24 Hours":
+            timeThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            break;
+          case "Last Week":
+            timeThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case "Last Month":
+            timeThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            break;
+          case "Last Year":
+            timeThreshold = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+            break;
+          default:
+            timeThreshold = new Date(0);
+        }
+        whereConditions.push(gte(posts.createdAt, timeThreshold));
+      }
+
+      // Tag filtering logic
+      let filteredPostIds: string[] = [];
+      if (tags.length > 0) {
+        const tagRecords = await Mydb.query.tags.findMany({
+          where: inArray(tags.name, tags),
+        });
+        const tagIds = tagRecords.map((t) => t.id);
+        if (tagIds.length > 0) {
+          const postTagRecords = await Mydb.query.postTags.findMany({
+            where: inArray(postTags.tagId, tagIds),
+            columns: { postId: true },
+          });
+          filteredPostIds = postTagRecords.map((pt) => pt.postId);
+          if (filteredPostIds.length > 0) {
+            whereConditions.push(inArray(posts.id, filteredPostIds));
+          } else {
+            return res.status(200).json({
+              message: "Posts fetched successfully",
+              posts: [],
+              pagination: {
+                currentPage: page,
+                totalPages: 0,
+                totalItems: 0,
+                hasNextPage: false,
+                hasPreviousPage: false,
+              },
+            });
+          }
+        }
+      }
+
+      // Get total posts count for pagination
+      const totalPosts = await Mydb.query.posts.findMany({
+        where: whereConditions.length > 0 ? and(...whereConditions) : undefined,
+      });
+
+      let postsData;
+
+      if (sort === "New") {
+        // Simple query for new posts
+        postsData = await Mydb.query.posts.findMany({
+          where:
+            whereConditions.length > 0 ? and(...whereConditions) : undefined,
+          limit,
+          offset,
+          orderBy: [desc(posts.createdAt)],
+          with: {
+            user: {
+              columns: {
+                username: true,
+                name: true,
+                avatar: true,
+              },
+            },
+            images: {
+              columns: {
+                imageUrl: true,
+              },
+            },
+            tags: {
+              with: {
+                tag: {
+                  columns: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      } else {
+        // For Top, Hot, and Controversial, we need custom queries with aggregations
+        const baseQuery = Mydb.select({
+          id: posts.id,
+          description: posts.description,
+          createdAt: posts.createdAt,
+          userId: posts.userId,
+          likesCount: sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0)`.mapWith(
+            Number
+          ),
+          commentsCount:
+            sql`COALESCE(COUNT(DISTINCT ${comments.id}), 0)`.mapWith(Number),
+        })
+          .from(posts)
+          .leftJoin(likes, eq(posts.id, likes.postId))
+          .leftJoin(comments, eq(posts.id, comments.postId))
+          .where(
+            whereConditions.length > 0 ? and(...whereConditions) : undefined
+          )
+          .groupBy(posts.id, posts.description, posts.createdAt, posts.userId);
+
+        let sortedPosts;
+        switch (sort) {
+          case "Top":
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0)`),
+                desc(posts.createdAt)
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+          case "Hot":
+            // Hot algorithm: likes per hour since creation
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`
+                  CASE 
+                    WHEN EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 3600 > 0 
+                    THEN COALESCE(COUNT(DISTINCT ${likes.userId}), 0) / (EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 3600)
+                    ELSE COALESCE(COUNT(DISTINCT ${likes.userId}), 0) * 1000
+                  END
+                `),
+                desc(posts.createdAt)
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+          case "Controversial":
+            // Controversial: high comment to like ratio
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`
+                  CASE 
+                    WHEN COALESCE(COUNT(DISTINCT ${likes.userId}), 0) > 0 
+                    THEN COALESCE(COUNT(DISTINCT ${comments.id}), 0)::float / COALESCE(COUNT(DISTINCT ${likes.userId}), 1)::float
+                    ELSE COALESCE(COUNT(DISTINCT ${comments.id}), 0)
+                  END
+                `),
+                desc(
+                  sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0) + COALESCE(COUNT(DISTINCT ${comments.id}), 0)`
+                )
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+        }
+
+        // Now fetch full post data for the sorted post IDs
+        const postIds = sortedPosts.map((p) => p.id);
+
+        postsData = await Mydb.query.posts.findMany({
+          where: inArray(posts.id, postIds),
+          with: {
+            user: {
+              columns: {
+                username: true,
+                name: true,
+                avatar: true,
+              },
+            },
+            images: {
+              columns: {
+                imageUrl: true,
+              },
+            },
+            tags: {
+              with: {
+                tag: {
+                  columns: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        // Maintain the sort order
+        const postOrderMap = new Map(
+          sortedPosts.map((p, index) => [p.id, index])
+        );
+        postsData.sort(
+          (a, b) => postOrderMap.get(a.id)! - postOrderMap.get(b.id)!
+        );
+      }
+
+      const postIds = postsData.map((p) => p.id);
+
+      // Get aggregated counts
+      const likesCounts = await Mydb.select({
+        postId: likes.postId,
+        count: sql`COUNT(*)`.mapWith(Number),
+      })
+        .from(likes)
+        .where(inArray(likes.postId, postIds))
+        .groupBy(likes.postId);
+
+      const commentsCounts = await Mydb.select({
+        postId: comments.postId,
+        count: sql`COUNT(*)`.mapWith(Number),
+      })
+        .from(comments)
+        .where(inArray(comments.postId, postIds))
+        .groupBy(comments.postId);
+
+      const likesCountMap = new Map(
+        likesCounts.map((l) => [l.postId, l.count])
+      );
+      const commentsCountMap = new Map(
+        commentsCounts.map((c) => [c.postId, c.count])
+      );
+
+      const postsWithCounts = postsData.map((post) => ({
+        ...post,
+        likeCount: likesCountMap.get(post.id) || 0,
+        commentCount: commentsCountMap.get(post.id) || 0,
+      }));
+
+      const totalItems = totalPosts.length;
+      const totalPages = Math.ceil(totalItems / limit);
+
+      return res.status(200).json({
+        message: "Posts fetched successfully",
+        posts: postsWithCounts,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+          limit,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching posts:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.get(
+  "/getPostsByTag/:tagName",
+  authenticateToken,
+  async (req: any, res: any) => {
+    try {
+      const tagName = req.params.tagName;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 9;
+      const timeFilter = req.query.timeFilter || "All Time";
+      const sort = req.query.sort || "New";
+
+      if (page < 1) {
+        return res.status(400).json({ message: "Page must be greater than 0" });
+      }
+      if (limit < 1 || limit > 100) {
+        return res
+          .status(400)
+          .json({ message: "Limit must be between 1 and 100" });
+      }
+
+      const offset = (page - 1) * limit;
+
+      const tag = await Mydb.query.tags.findFirst({
+        where: eq(tags.name, tagName),
+      });
+
+      if (!tag) {
+        return res.status(404).json({ message: "Tag not found" });
+      }
+
+      const allPostIds = await Mydb.query.postTags.findMany({
+        where: eq(postTags.tagId, tag.id),
+        columns: { postId: true },
+      });
+
+      if (allPostIds.length === 0) {
+        return res.status(200).json({
+          message: "Posts fetched successfully",
+          posts: [],
+          pagination: {
+            currentPage: page,
+            totalPages: 0,
+            totalItems: 0,
+            hasNextPage: false,
+            hasPreviousPage: false,
+          },
+        });
+      }
+
+      const allPostIdList = allPostIds.map((pt) => pt.postId);
+      let whereConditions: any[] = [inArray(posts.id, allPostIdList)];
+
+      // Time filter logic
+      if (timeFilter !== "All Time") {
+        const now = new Date();
+        let timeThreshold: Date;
+
+        switch (timeFilter) {
+          case "Last 24 Hours":
+            timeThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            break;
+          case "Last Week":
+            timeThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case "Last Month":
+            timeThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            break;
+          case "Last Year":
+            timeThreshold = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+            break;
+          default:
+            timeThreshold = new Date(0);
+        }
+        whereConditions.push(gte(posts.createdAt, timeThreshold));
+      }
+
+      const filteredPosts = await Mydb.query.posts.findMany({
+        where: and(...whereConditions),
+        columns: { id: true },
+      });
+
+      const totalItems = filteredPosts.length;
+
+      let postsWithTag;
+
+      if (sort === "New") {
+        postsWithTag = await Mydb.query.posts.findMany({
+          where: and(...whereConditions),
+          limit: limit,
+          offset: offset,
+          orderBy: [desc(posts.createdAt)],
+          with: {
+            user: {
+              columns: {
+                username: true,
+                name: true,
+                avatar: true,
+              },
+            },
+            images: {
+              columns: {
+                imageUrl: true,
+              },
+            },
+            tags: {
+              with: {
+                tag: {
+                  columns: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+      } else {
+        // Custom sorting queries for Top, Hot, Controversial
+        const baseQuery = Mydb.select({
+          id: posts.id,
+          description: posts.description,
+          createdAt: posts.createdAt,
+          userId: posts.userId,
+          likesCount: sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0)`.mapWith(
+            Number
+          ),
+          commentsCount:
+            sql`COALESCE(COUNT(DISTINCT ${comments.id}), 0)`.mapWith(Number),
+        })
+          .from(posts)
+          .leftJoin(likes, eq(posts.id, likes.postId))
+          .leftJoin(comments, eq(posts.id, comments.postId))
+          .where(and(...whereConditions))
+          .groupBy(posts.id, posts.description, posts.createdAt, posts.userId);
+
+        let sortedPosts;
+        switch (sort) {
+          case "Top":
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0)`),
+                desc(posts.createdAt)
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+          case "Hot":
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`
+                  CASE 
+                    WHEN EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 3600 > 0 
+                    THEN COALESCE(COUNT(DISTINCT ${likes.userId}), 0) / (EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 3600)
+                    ELSE COALESCE(COUNT(DISTINCT ${likes.userId}), 0) * 1000
+                  END
+                `),
+                desc(posts.createdAt)
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+          case "Controversial":
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`
+                  CASE 
+                    WHEN COALESCE(COUNT(DISTINCT ${likes.userId}), 0) > 0 
+                    THEN COALESCE(COUNT(DISTINCT ${comments.id}), 0)::float / COALESCE(COUNT(DISTINCT ${likes.userId}), 1)::float
+                    ELSE COALESCE(COUNT(DISTINCT ${comments.id}), 0)
+                  END
+                `),
+                desc(
+                  sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0) + COALESCE(COUNT(DISTINCT ${comments.id}), 0)`
+                )
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+        }
+
+        const postIds = sortedPosts.map((p) => p.id);
+
+        postsWithTag = await Mydb.query.posts.findMany({
+          where: inArray(posts.id, postIds),
+          with: {
+            user: {
+              columns: {
+                username: true,
+                name: true,
+                avatar: true,
+              },
+            },
+            images: {
+              columns: {
+                imageUrl: true,
+              },
+            },
+            tags: {
+              with: {
+                tag: {
+                  columns: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        // Maintain sort order
+        const postOrderMap = new Map(
+          sortedPosts.map((p, index) => [p.id, index])
+        );
+        postsWithTag.sort(
+          (a, b) => postOrderMap.get(a.id)! - postOrderMap.get(b.id)!
+        );
+      }
+
+      const postIds = postsWithTag.map((p) => p.id);
+
+      // Get counts
+      const likesCountRaw = await Mydb.select({
+        postId: likes.postId,
+        count: sql`count(*)`,
+      })
+        .from(likes)
+        .where(inArray(likes.postId, postIds))
+        .groupBy(likes.postId);
+
+      const commentsCountRaw = await Mydb.select({
+        postId: comments.postId,
+        count: sql`count(*)`,
+      })
+        .from(comments)
+        .where(inArray(comments.postId, postIds))
+        .groupBy(comments.postId);
+
+      const likesCountMap = new Map(
+        likesCountRaw.map(({ postId, count }) => [postId, Number(count)])
+      );
+      const commentsCountMap = new Map(
+        commentsCountRaw.map(({ postId, count }) => [postId, Number(count)])
+      );
+
+      const postsWithCounts = postsWithTag.map((post) => ({
+        ...post,
+        likesCount: likesCountMap.get(post.id) || 0,
+        commentsCount: commentsCountMap.get(post.id) || 0,
+      }));
+
+      const totalPages = Math.ceil(totalItems / limit);
+
+      return res.status(200).json({
+        message: "Posts fetched successfully",
+        posts: postsWithCounts,
+        pagination: {
+          currentPage: page,
+          totalPages: totalPages,
+          totalItems: totalItems,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+          limit: limit,
+        },
+      });
+    } catch (error) {
+      console.error("Error in /getPostsByTag:", error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+);
+
+router.get(
+  "/getSearchedPosts/:searchQuery",
+  authenticateToken,
+  async (req: any, res: any) => {
+    try {
+      const searchQuery = req.params.searchQuery.trim();
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 9;
+      const timeFilter = req.query.timeFilter || "All Time";
+      const sort = req.query.sort || "New";
+
+      if (page < 1) {
+        return res.status(400).json({ message: "Page must be greater than 0" });
+      }
+      if (limit < 1 || limit > 100) {
+        return res
+          .status(400)
+          .json({ message: "Limit must be between 1 and 100" });
+      }
+
+      const offset = (page - 1) * limit;
+
+      let whereConditions: any[] = [
+        sql`${posts.description} ILIKE ${'%' + searchQuery + '%'}`
+      ];
+
+      // Time filter
+      if (timeFilter !== "All Time") {
+        const now = new Date();
+        let timeThreshold: Date;
+        switch (timeFilter) {
+          case "Last 24 Hours":
+            timeThreshold = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            break;
+          case "Last Week":
+            timeThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            break;
+          case "Last Month":
+            timeThreshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            break;
+          case "Last Year":
+            timeThreshold = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+            break;
+          default:
+            timeThreshold = new Date(0);
+        }
+        whereConditions.push(gte(posts.createdAt, timeThreshold));
+      }
+
+      const filteredPosts = await Mydb.query.posts.findMany({
+        where: and(...whereConditions),
+        columns: { id: true },
+      });
+
+      const totalItems = filteredPosts.length;
+
+      let postsFound;
+
+      if (sort === "New") {
+        postsFound = await Mydb.query.posts.findMany({
+          where: and(...whereConditions),
+          limit,
+          offset,
+          orderBy: [desc(posts.createdAt)],
+          with: {
+            user: {
+              columns: { username: true, name: true, avatar: true },
+            },
+            images: {
+              columns: { imageUrl: true },
+            },
+            tags: {
+              with: {
+                tag: {
+                  columns: { name: true },
+                },
+              },
+            },
+          },
+        });
+      } else {
+        const baseQuery = Mydb.select({
+          id: posts.id,
+          description: posts.description,
+          createdAt: posts.createdAt,
+          userId: posts.userId,
+          likesCount: sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0)`.mapWith(Number),
+          commentsCount: sql`COALESCE(COUNT(DISTINCT ${comments.id}), 0)`.mapWith(Number),
+        })
+          .from(posts)
+          .leftJoin(likes, eq(posts.id, likes.postId))
+          .leftJoin(comments, eq(posts.id, comments.postId))
+          .where(and(...whereConditions))
+          .groupBy(posts.id, posts.description, posts.createdAt, posts.userId);
+
+        let sortedPosts;
+        switch (sort) {
+          case "Top":
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0)`),
+                desc(posts.createdAt)
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+          case "Hot":
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`
+                  CASE 
+                    WHEN EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 3600 > 0 
+                    THEN COALESCE(COUNT(DISTINCT ${likes.userId}), 0) / (EXTRACT(EPOCH FROM (NOW() - ${posts.createdAt})) / 3600)
+                    ELSE COALESCE(COUNT(DISTINCT ${likes.userId}), 0) * 1000
+                  END
+                `),
+                desc(posts.createdAt)
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+          case "Controversial":
+            sortedPosts = await baseQuery
+              .orderBy(
+                desc(sql`
+                  CASE 
+                    WHEN COALESCE(COUNT(DISTINCT ${likes.userId}), 0) > 0 
+                    THEN COALESCE(COUNT(DISTINCT ${comments.id}), 0)::float / COALESCE(COUNT(DISTINCT ${likes.userId}), 1)::float
+                    ELSE COALESCE(COUNT(DISTINCT ${comments.id}), 0)
+                  END
+                `),
+                desc(
+                  sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0) + COALESCE(COUNT(DISTINCT ${comments.id}), 0)`
+                )
+              )
+              .limit(limit)
+              .offset(offset);
+            break;
+        }
+
+        const postIds = sortedPosts.map((p) => p.id);
+
+        postsFound = await Mydb.query.posts.findMany({
+          where: inArray(posts.id, postIds),
+          with: {
+            user: {
+              columns: { username: true, name: true, avatar: true },
+            },
+            images: {
+              columns: { imageUrl: true },
+            },
+            tags: {
+              with: {
+                tag: {
+                  columns: { name: true },
+                },
+              },
+            },
+          },
+        });
+
+        const orderMap = new Map(sortedPosts.map((p, i) => [p.id, i]));
+        postsFound.sort((a, b) => orderMap.get(a.id)! - orderMap.get(b.id)!);
+      }
+
+      const postIds = postsFound.map((p) => p.id);
+
+      const likesCountRaw = await Mydb.select({
+        postId: likes.postId,
+        count: sql`count(*)`,
+      })
+        .from(likes)
+        .where(inArray(likes.postId, postIds))
+        .groupBy(likes.postId);
+
+      const commentsCountRaw = await Mydb.select({
+        postId: comments.postId,
+        count: sql`count(*)`,
+      })
+        .from(comments)
+        .where(inArray(comments.postId, postIds))
+        .groupBy(comments.postId);
+
+      const likesCountMap = new Map(
+        likesCountRaw.map(({ postId, count }) => [postId, Number(count)])
+      );
+      const commentsCountMap = new Map(
+        commentsCountRaw.map(({ postId, count }) => [postId, Number(count)])
+      );
+
+      const postsWithCounts = postsFound.map((post) => ({
+        ...post,
+        likesCount: likesCountMap.get(post.id) || 0,
+        commentsCount: commentsCountMap.get(post.id) || 0,
+      }));
+
+      const totalPages = Math.ceil(totalItems / limit);
+
+      return res.status(200).json({
+        message: "Searched posts fetched successfully",
+        posts: postsWithCounts,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+          limit,
+        },
+      });
+    } catch (error) {
+      console.error("❌ Error in /getSearchedPosts:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
+    }
+  }
+);
+
 
 export default router;

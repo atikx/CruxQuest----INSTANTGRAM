@@ -36,7 +36,7 @@ const Root = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
+        <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
           <Toaster />
 
           <AppNavbar />

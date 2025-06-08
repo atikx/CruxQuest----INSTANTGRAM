@@ -8,7 +8,7 @@ import {
   Menu,
   CirclePlus,
 } from "lucide-react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -35,11 +35,9 @@ export default function AppNavbar() {
   const currentPath = location.pathname;
   const [searchQuery, setSearchQuery] = useState("");
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
-  const handleSearch = () => {
-    console.log("Search for:", searchQuery);
-    // Add navigation or API call here
-  };
+ 
 
   const navItems = [
     { path: "/home", icon: Home, label: "Home" },
@@ -58,7 +56,7 @@ export default function AppNavbar() {
   };
 
   if (currentPath === "/auth" || currentPath === "/otp") {
-    return null; // Hide navbar on auth page
+    return null;
   }
 
   return (
@@ -71,7 +69,7 @@ export default function AppNavbar() {
           </div>
 
           {/* Search - Hidden on mobile, visible on sm+ */}
-          <div className="hidden sm:flex items-center space-x-2">
+          {/* <div className="hidden sm:flex items-center space-x-2">
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -81,18 +79,25 @@ export default function AppNavbar() {
             <Button
               size="icon"
               variant="outline"
-              onClick={handleSearch}
+              // onClick={handleSearch}
               className="h-8 w-8 lg:h-12 lg:w-12 border-input hover:bg-accent hover:text-accent-foreground"
             >
               <Search className="w-4 h-4" />
             </Button>
-          </div>
+          </div> */}
         </div>
 
         {/* Centered Navigation Icons with Tooltips - Hidden on mobile */}
         <div className="hidden md:absolute md:left-1/2 md:transform md:-translate-x-1/2 md:flex items-center space-x-4 lg:space-x-6">
           {navItems.map(({ path, icon: Icon, label }) => {
-            const isActive = currentPath === path;
+            let isActive = currentPath === path;
+
+            if (path === "/explore") {
+              isActive =
+                currentPath.startsWith("/explore") ||
+                currentPath.startsWith("/post/");
+            }
+
             return (
               <Tooltip key={path}>
                 <TooltipTrigger asChild>
@@ -159,7 +164,7 @@ export default function AppNavbar() {
 
               <div className="mt-6 space-y-4">
                 {/* Mobile Search */}
-                <div className="flex items-center space-x-2 sm:hidden">
+                {/* <div className="flex items-center space-x-2 sm:hidden">
                   <Input
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -169,17 +174,24 @@ export default function AppNavbar() {
                   <Button
                     size="icon"
                     variant="outline"
-                    onClick={handleSearch}
+                    // onClick={handleSearch}
                     className="h-9 w-9 border-input hover:bg-accent hover:text-accent-foreground"
                   >
                     <Search className="w-4 h-4" />
                   </Button>
-                </div>
+                </div> */}
 
                 {/* Mobile Navigation Links */}
                 <div className="space-y-2 pt-4">
                   {navItems.map(({ path, icon: Icon, label }) => {
-                    const isActive = currentPath === path;
+                    let isActive = currentPath === path;
+
+                    if (path === "/explore") {
+                      isActive =
+                        currentPath.startsWith("/explore") ||
+                        currentPath.startsWith("/post/");
+                    }
+
                     return (
                       <Link
                         key={path}

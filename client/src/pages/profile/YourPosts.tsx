@@ -209,7 +209,9 @@ export default function YourPosts() {
               {post.tags.length > 0 && (
                 <p className="text-sm text-muted-foreground">
                   {post.tags.map((tagObj, index) => (
-                    <span key={index} className="mr-2">
+                    <span onClick={() => {
+                      nagigate(`/explore/filter?tag=${tagObj.tag.name}`);
+                    }} key={index} className="mr-2 cursor-pointer">
                       #{tagObj.tag.name}
                     </span>
                   ))}
