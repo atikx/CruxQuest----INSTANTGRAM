@@ -56,7 +56,7 @@ const fetchPostsToExplore = async ({
       timeFilter,
       tags: tags.join(","), // for /getPostsToExplore only
       page,
-      limit: 9,
+      limit: 6,
     },
   });
 

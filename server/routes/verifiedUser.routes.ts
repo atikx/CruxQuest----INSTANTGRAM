@@ -13,7 +13,7 @@ import { tags } from "../drizzle/schema";
 import { comments } from "../drizzle/schema";
 import bcrypt from "bcryptjs";
 import { count } from "drizzle-orm";
-import { sendMilestoneMail } from "../functions/mailer";
+import { sendFriendRequestMail, sendMilestoneMail } from "../functions/mailer";
 const router = Router();
 
 router.use(authenticateVerifiedUserToken);
@@ -368,9 +368,21 @@ router.post("/sendFriendRequest", async (req: any, res: any) => {
       status: "pending",
     });
 
-    return res
-      .status(200)
-      .json({ message: "Friend request sent successfully" });
+    res.status(200).json({ message: "Friend request sent successfully" });
+    // Fetch the receiver's email and name for sending the email
+    const receiver = await Mydb.select({
+      email: users.email,
+      name: users.name,
+      username: users.username,
+    })
+      .from(users)
+      .where(eq(users.id, toUserId));
+
+    await sendFriendRequestMail(
+      receiver[0].email,
+      receiver[0].name || receiver[0].username,
+      req.verifiedUser.name || req.verifiedUser.username
+    );
   } catch (error) {
     console.error("❌ Error in /sendFriendRequest:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -991,8 +1003,6 @@ router.get("/getFriends", async (req: any, res: any) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 });
-
-
 
 router.get("/searchFriends/:query", async (req: any, res: any) => {
   try {

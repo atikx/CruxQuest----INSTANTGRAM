@@ -61,3 +61,34 @@ export const sendMilestoneMail = async (
   await transporter.sendMail(mailOptions);
   console.log(`✅ Milestone email sent to ${email} for post ${postId}`);
 };
+
+
+export const sendFriendRequestMail = async (
+  receiverEmail: string,
+  receiverName: string,
+  senderName: string
+) => {
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
+
+  const htmlTemplate = fs
+    .readFileSync("./templates/friend-request-email.html", "utf-8")
+    .replace(/{{RECEIVER_NAME}}/g, receiverName)
+    .replace(/{{SENDER_NAME}}/g, senderName);
+
+  const mailOptions = {
+    from: `"InstantGram" <${process.env.MAIL_USER}>`,
+    to: receiverEmail,
+    subject: `${senderName} sent you a friend request on InstantGram!`,
+    html: htmlTemplate,
+  };
+
+  await transporter.sendMail(mailOptions);
+  console.log(`📩 Friend request email sent to ${receiverEmail}`);
+};
