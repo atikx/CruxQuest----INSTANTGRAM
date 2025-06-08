@@ -14,6 +14,7 @@ import { comments } from "../drizzle/schema";
 import bcrypt from "bcryptjs";
 import { count } from "drizzle-orm";
 import { sendFriendRequestMail, sendMilestoneMail } from "../functions/mailer";
+import { limitTo10in1, limitTo2in1 } from "../middlewares/rateLimiter";
 const router = Router();
 
 router.use(authenticateVerifiedUserToken);
@@ -146,7 +147,7 @@ router.get("/getYourPosts", async (req: any, res: any) => {
   }
 });
 
-router.put("/deletePost", async (req: any, res: any) => {
+router.put("/deletePost", limitTo10in1, async (req: any, res: any) => {
   try {
     const { postId } = req.body;
 
@@ -171,7 +172,7 @@ router.put("/deletePost", async (req: any, res: any) => {
   }
 });
 
-router.get("/getFullUserData", async (req: any, res: any) => {
+router.get("/getFullUserData", limitTo10in1, async (req: any, res: any) => {
   try {
     const userId = req.verifiedUser.id;
 
@@ -218,6 +219,7 @@ router.get("/getFullUserData", async (req: any, res: any) => {
 
 router.put(
   "/updateAvatar",
+  limitTo2in1,
   saveImgOnDisk.single("image"),
   async (req: any, res: any) => {
     try {
@@ -251,7 +253,7 @@ router.put(
   }
 );
 
-router.get("/searchUser", async (req: any, res: any) => {
+router.get("/searchUser", limitTo10in1, async (req: any, res: any) => {
   try {
     const rawQuery = req.query.query;
     const query =
@@ -338,7 +340,7 @@ router.get("/searchUser", async (req: any, res: any) => {
   }
 });
 
-router.post("/sendFriendRequest", async (req: any, res: any) => {
+router.post("/sendFriendRequest", limitTo10in1, async (req: any, res: any) => {
   try {
     const { toUserId } = req.body;
     const fromUserId = req.verifiedUser.id;
@@ -421,7 +423,7 @@ router.get("/getFriendRequests", async (req: any, res: any) => {
   }
 });
 
-router.put("/acceptFriendRequest", async (req: any, res: any) => {
+router.put("/acceptFriendRequest", limitTo10in1, async (req: any, res: any) => {
   try {
     const { requestId } = req.body;
     const userId = req.verifiedUser.id;
@@ -482,49 +484,53 @@ router.put("/acceptFriendRequest", async (req: any, res: any) => {
   }
 });
 
-router.put("/declineFriendRequest", async (req: any, res: any) => {
-  try {
-    const { requestId } = req.body;
-    const userId = req.verifiedUser.id;
-    if (!requestId) {
-      return res.status(400).json({ message: "Invalid request ID" });
-    }
-    // check if the request exists
-    const request = await Mydb.select()
-      .from(friendRequests)
-      .where(
-        and(
-          eq(friendRequests.id, requestId),
-          eq(friendRequests.toUser, userId),
-          eq(friendRequests.status, "pending")
-        )
-      );
-    if (request.length === 0) {
-      return res.status(404).json({ message: "Friend request not found" });
-    }
-    // Update the request status to accepted
-    const updatedRequest = await Mydb.update(friendRequests)
-      .set({ status: "rejected" })
-      .where(eq(friendRequests.id, requestId))
-      .returning({
-        id: friendRequests.id,
+router.put(
+  "/declineFriendRequest",
+  limitTo10in1,
+  async (req: any, res: any) => {
+    try {
+      const { requestId } = req.body;
+      const userId = req.verifiedUser.id;
+      if (!requestId) {
+        return res.status(400).json({ message: "Invalid request ID" });
+      }
+      // check if the request exists
+      const request = await Mydb.select()
+        .from(friendRequests)
+        .where(
+          and(
+            eq(friendRequests.id, requestId),
+            eq(friendRequests.toUser, userId),
+            eq(friendRequests.status, "pending")
+          )
+        );
+      if (request.length === 0) {
+        return res.status(404).json({ message: "Friend request not found" });
+      }
+      // Update the request status to accepted
+      const updatedRequest = await Mydb.update(friendRequests)
+        .set({ status: "rejected" })
+        .where(eq(friendRequests.id, requestId))
+        .returning({
+          id: friendRequests.id,
+        });
+
+      if (updatedRequest.length === 0) {
+        return res.status(400).json({ message: "Failed to accept request" });
+      }
+
+      return res.status(200).json({
+        message: "Friend request accepted successfully",
+        requestId: updatedRequest[0].id,
       });
-
-    if (updatedRequest.length === 0) {
-      return res.status(400).json({ message: "Failed to accept request" });
+    } catch (error) {
+      console.error("❌ Error in /acceptFriendRequest:", error);
+      return res.status(500).json({ message: "Internal Server Error" });
     }
-
-    return res.status(200).json({
-      message: "Friend request accepted successfully",
-      requestId: updatedRequest[0].id,
-    });
-  } catch (error) {
-    console.error("❌ Error in /acceptFriendRequest:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
   }
-});
+);
 
-router.put("/removeFriend", async (req: any, res: any) => {
+router.put("/removeFriend", limitTo10in1, async (req: any, res: any) => {
   try {
     const { friendId } = req.body;
     const userId = req.verifiedUser.id;
@@ -567,7 +573,7 @@ router.put("/removeFriend", async (req: any, res: any) => {
   }
 });
 
-router.put("/updateProfile", async (req: any, res: any) => {
+router.put("/updateProfile", limitTo2in1, async (req: any, res: any) => {
   try {
     const { name, newPassword, bio } = req.body;
     const user = req.verifiedUser;
@@ -789,7 +795,7 @@ router.get("/getPost/:postId", async (req: any, res: any) => {
   }
 });
 
-router.post("/addComment", async (req: any, res: any) => {
+router.post("/addComment", limitTo10in1, async (req: any, res: any) => {
   try {
     const { postId, content, parentId } = req.body;
     const userId = req.verifiedUser.id;
@@ -830,7 +836,7 @@ router.post("/addComment", async (req: any, res: any) => {
   }
 });
 
-router.post("/likePost/:postId", async (req: any, res: any) => {
+router.post("/likePost/:postId", limitTo10in1, async (req: any, res: any) => {
   try {
     const postId = req.params.postId;
     const userId = req.verifiedUser.id;
@@ -890,7 +896,7 @@ router.post("/likePost/:postId", async (req: any, res: any) => {
   }
 });
 
-router.post("/unlikePost/:postId", async (req: any, res: any) => {
+router.post("/unlikePost/:postId", limitTo10in1, async (req: any, res: any) => {
   try {
     const postId = req.params.postId;
     const userId = req.verifiedUser.id;
