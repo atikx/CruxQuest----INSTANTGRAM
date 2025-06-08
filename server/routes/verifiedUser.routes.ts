@@ -265,7 +265,7 @@ router.get("/searchUser", async (req: any, res: any) => {
     // 1. Get search results (fuzzy match)
     const searchResults = await Mydb.execute(
       sql`
-        SELECT id, username, name, "profilePictureUrl" as avatar
+        SELECT id, username, name, "avatar" as avatar
         FROM users
         WHERE id != ${user.id}
         AND (
@@ -276,7 +276,6 @@ router.get("/searchUser", async (req: any, res: any) => {
           similarity(lower(username), ${query}),
           similarity(lower(name), ${query})
         ) DESC
-        LIMIT 10
       `
     );
 
@@ -338,6 +337,7 @@ router.get("/searchUser", async (req: any, res: any) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 });
+
 router.post("/sendFriendRequest", async (req: any, res: any) => {
   try {
     const { toUserId } = req.body;
@@ -595,7 +595,9 @@ router.put("/updateProfile", async (req: any, res: any) => {
 router.get("/getFriendPosts", async (req: any, res: any) => {
   try {
     const userId = req.verifiedUser.id;
-    const oneDayAgoISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const oneDayAgoISO = new Date(
+      Date.now() - 24 * 60 * 60 * 1000
+    ).toISOString();
 
     const result = await Mydb.execute(sql`
       SELECT 
@@ -648,7 +650,6 @@ router.get("/getFriendPosts", async (req: any, res: any) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 });
-
 
 router.get("/getComments/:postId", async (req: any, res: any) => {
   try {
@@ -882,12 +883,9 @@ router.post("/unlikePost/:postId", async (req: any, res: any) => {
     const postId = req.params.postId;
     const userId = req.verifiedUser.id;
 
-
     // Delete like
     const deletedLike = await Mydb.delete(likes)
-      .where(
-        and(eq(likes.postId, postId), eq(likes.userId, userId))
-      )
+      .where(and(eq(likes.postId, postId), eq(likes.userId, userId)))
       .returning({
         id: likes.userId,
       });
@@ -909,6 +907,173 @@ router.post("/unlikePost/:postId", async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("❌ Error in /unlikePost:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// Updated /getFriends route with pagination
+router.get("/getFriends", async (req: any, res: any) => {
+  try {
+    const userId = req.verifiedUser.id;
+
+    // Get pagination parameters from query string
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    // Get total count of friends using correct Drizzle syntax
+    const totalCountResult = await Mydb.select({ count: count() })
+      .from(friendRequests)
+      .where(
+        and(
+          or(
+            eq(friendRequests.fromUser, userId),
+            eq(friendRequests.toUser, userId)
+          ),
+          eq(friendRequests.status, "accepted")
+        )
+      );
+
+    const totalCount = totalCountResult[0]?.count || 0;
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Fetch paginated friends
+    const friends = await Mydb.query.friendRequests.findMany({
+      where: (friendRequests, { eq, and, or }) =>
+        and(
+          or(
+            eq(friendRequests.fromUser, userId),
+            eq(friendRequests.toUser, userId)
+          ),
+          eq(friendRequests.status, "accepted")
+        ),
+      with: {
+        fromUser: {
+          columns: {
+            id: true,
+            username: true,
+            name: true,
+            avatar: true,
+          },
+        },
+        toUser: {
+          columns: {
+            id: true,
+            username: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+      limit: limit,
+      offset: offset,
+    });
+
+    // Map to get only the friend details
+    const friendList = friends.map((friend) => {
+      return friend.fromUser.id === userId ? friend.toUser : friend.fromUser;
+    });
+
+    return res.status(200).json({
+      message: "Friends fetched successfully",
+      friends: friendList,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalCount,
+        limit,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error in /getFriends:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+
+
+router.get("/searchFriends/:query", async (req: any, res: any) => {
+  try {
+    const rawQuery = req.params.query;
+    const query =
+      typeof rawQuery === "string" ? rawQuery.trim().toLowerCase() : "";
+    const user = req.verifiedUser;
+
+    // Get pagination parameters from query string
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    if (!query) {
+      return res.status(400).json({ message: "Invalid search query" });
+    }
+
+    // Get total count for pagination metadata
+    const countResult = await Mydb.execute(
+      sql`
+        SELECT COUNT(*) as total
+        FROM "friendRequests" fr
+        JOIN users u ON (
+          (fr."fromUser" = ${user.id} AND fr."toUser" = u.id)
+          OR
+          (fr."toUser" = ${user.id} AND fr."fromUser" = u.id)
+        )
+        WHERE fr.status = 'accepted'
+        AND (
+          similarity(lower(u.username), ${query}) > 0.2
+          OR similarity(lower(u.name), ${query}) > 0.2
+        )
+      `
+    );
+
+    const totalCount = parseInt(countResult[0]?.total || "0");
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Get paginated results
+    const acceptedFriends = await Mydb.execute(
+      sql`
+        SELECT 
+          u.id, u.username, u.name, u."avatar"
+        FROM "friendRequests" fr
+        JOIN users u ON (
+          (fr."fromUser" = ${user.id} AND fr."toUser" = u.id)
+          OR
+          (fr."toUser" = ${user.id} AND fr."fromUser" = u.id)
+        )
+        WHERE fr.status = 'accepted'
+        AND (
+          similarity(lower(u.username), ${query}) > 0.2
+          OR similarity(lower(u.name), ${query}) > 0.2
+        )
+        ORDER BY GREATEST(
+          similarity(lower(u.username), ${query}),
+          similarity(lower(u.name), ${query})
+        ) DESC
+        LIMIT ${limit}
+        OFFSET ${offset}
+      `
+    );
+
+    if (acceptedFriends.length === 0 && page === 1) {
+      return res.status(404).json({ message: "No matching friends found" });
+    }
+
+    return res.status(200).json({
+      message: "Friends found",
+      searchResults: acceptedFriends,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalCount,
+        limit,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error in /searchFriends:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 });

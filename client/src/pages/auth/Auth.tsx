@@ -15,6 +15,14 @@ import { TrainFrontTunnel } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuthStore } from "@/lib/store";
+import { useMutation } from "@tanstack/react-query";
+import { auth, googleProvider } from "@/lib/firebase";
+import {
+  signInWithPopup,
+  type UserCredential,
+  type Auth,
+  type AuthProvider,
+} from "firebase/auth";
 
 export default function LoginPage() {
   const setUser = useAuthStore((state) => state.setUser);
@@ -80,6 +88,42 @@ export default function LoginPage() {
     }
   };
 
+  const googleMutation = useMutation({
+    mutationFn: async () => {
+      const result: UserCredential = await signInWithPopup(
+        auth as Auth,
+        googleProvider as AuthProvider
+      );
+      const user = result.user;
+      const token = await user.getIdToken();
+      const res = await api.post("/user/auth/google", {
+        token,
+      });
+      return res;
+    },
+    onMutate: () => {},
+    onSuccess: (res) => {
+      if (res.status === 200) {
+        toast.success(res.data.message, {
+          description: "Welcome",
+        });
+        setUser(res.data.user);
+        navigate("/");
+      }
+    },
+    onError: (error: any) => {
+      console.error("Google login mutation failed", error);
+      toast.error(
+        `Login Failed ${error.response?.data?.message || "An error occurred"}`
+      );
+    },
+    onSettled: () => {},
+  });
+
+  const handleGoogleLogin = () => {
+    googleMutation.mutate();
+  };
+
   // Handle Sign Up form submission
   const handleSignupSubmit = async (e: any) => {
     e.preventDefault();
@@ -92,7 +136,8 @@ export default function LoginPage() {
       });
       if (res.status === 200) {
         toast.success("Sign Up successful", {
-          description: "Please enter the OTP sent on your email for verification.",
+          description:
+            "Please enter the OTP sent on your email for verification.",
         });
         setUser(res.data.user); // Set user in the store
         navigate("/otp"); // Redirect to home page after successful signup
@@ -194,7 +239,7 @@ export default function LoginPage() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={handleGoogleButton}
+                  onClick={handleGoogleLogin}
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -271,7 +316,7 @@ export default function LoginPage() {
                     </Button>
                   </div>
                 </form>
-                <div
+                {/* <div
                   className="relative text-center mt-4 mb-4 text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border"
                   data-aos="fade-up"
                   data-aos-delay="200"
@@ -283,7 +328,7 @@ export default function LoginPage() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={handleGoogleButton}
+                  onClick={handleGoogleLogin}
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -296,7 +341,7 @@ export default function LoginPage() {
                     />
                   </svg>
                   Sign Up with Google
-                </Button>
+                </Button> */}
               </TabsContent>
             </Tabs>
           </div>

@@ -7,6 +7,7 @@ import UserProtected from "./pages/protected/UserProtected";
 import PostDetailPage from "./pages/postDetail/PostDetail";
 import YourProfile from "./pages/profile/YourProfile";
 import Explore from "./pages/explore/Explore";
+import Settings from "./pages/settings/Settings";
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="/newPost" element={<NewPost />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/settings" element={<Settings />} />
 
         {/* Explore route with and without search param */}
         <Route path="/explore" element={<Explore />} />

@@ -15,9 +15,57 @@ import { generateToken } from "../functions/tokenGenerator";
 import bcrypt from "bcryptjs";
 import { authenticateToken } from "../middlewares/jwtauth";
 import { inArray, gte, and } from "drizzle-orm";
-
+import serviceAccount from "../config/fire-base.json" assert { type: "json" };
+import admin from "firebase-admin";
 import { sendOtpMail } from "../functions/mailer";
+
 const router = Router();
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount as any),
+});
+
+router.post("/auth/google", async (req: any, res: any) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ message: "Token is required" });
+    }
+    const user = await admin.auth().verifyIdToken(req.body.token);
+    if (!user.email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+    console.log(user);
+
+    const existingUser = await Mydb.select({
+      id: users.id,
+      email: users.email,
+      username: users.username,
+      name: users.name,
+      avatar: users.avatar,
+      isEmailVerified: users.isEmailVerified,
+    })
+      .from(users)
+      .where(eq(users.email, user.email));
+    if (existingUser.length == 0) {
+      return res.status(404).json({
+        message: "User not found, please register first",
+      });
+    }
+    res.cookie("token", generateToken(existingUser[0].id), {
+      httpOnly: true,
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    return res.status(200).json({
+      message: "Login successful",
+      user: existingUser[0],
+    });
+  } catch (error) {
+    console.error("Error during Google authentication:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 router.post(
   "/auth/signup",
@@ -102,7 +150,11 @@ router.post(
       if (!isMatch) {
         return res.status(400).send("Invalid Password");
       }
-      res.cookie("token", generateToken(user[0].id));
+      res.cookie("token", generateToken(user[0].id), {
+        httpOnly: true,
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
       res.status(200).json({
         message: "Login successful",
         user: {
@@ -120,6 +172,20 @@ router.post(
     }
   }
 );
+
+router.post("/auth/logout", authenticateToken, (req, res) => {
+  try {
+    res.clearCookie("token", {
+      httpOnly: true,
+      sameSite: "strict",
+      maxAge: 0,
+    });
+    return res.status(200).json({ message: "Logout successful" });
+  } catch (error) {
+    console.error("Error during logout:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 router.get("/auth/getuser", authenticateToken, async (req, res) => {
   try {
@@ -787,7 +853,7 @@ router.get(
       const offset = (page - 1) * limit;
 
       let whereConditions: any[] = [
-        sql`${posts.description} ILIKE ${'%' + searchQuery + '%'}`
+        sql`${posts.description} ILIKE ${"%" + searchQuery + "%"}`,
       ];
 
       // Time filter
@@ -850,8 +916,11 @@ router.get(
           description: posts.description,
           createdAt: posts.createdAt,
           userId: posts.userId,
-          likesCount: sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0)`.mapWith(Number),
-          commentsCount: sql`COALESCE(COUNT(DISTINCT ${comments.id}), 0)`.mapWith(Number),
+          likesCount: sql`COALESCE(COUNT(DISTINCT ${likes.userId}), 0)`.mapWith(
+            Number
+          ),
+          commentsCount:
+            sql`COALESCE(COUNT(DISTINCT ${comments.id}), 0)`.mapWith(Number),
         })
           .from(posts)
           .leftJoin(likes, eq(posts.id, likes.postId))
@@ -980,6 +1049,5 @@ router.get(
     }
   }
 );
-
 
 export default router;

@@ -1,4 +1,12 @@
-/server/.env
+# Ignore all .env files in root and subdirectories
+.env
 */.env
 
+# Ignore entire public and config folders inside /server
 /server/public/
+/server/config/
+
+# Ignore fire-base.json anywhere
+fire-base.json
+**/fire-base.json
+*/server/config/fire-base.json
