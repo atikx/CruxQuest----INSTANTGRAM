@@ -528,13 +528,7 @@ export default function YourProfile() {
               POSTS
             </TabsTrigger>
 
-            <TabsTrigger
-              value="saved"
-              className="flex items-center gap-2 text-sm font-medium pt-4 pb-2 bg-transparent data-[state=active]:border-t-2 data-[state=active]:border-black data-[state=active]:shadow-none data-[state=active]:bg-transparent border-t-2 border-transparent text-muted-foreground data-[state=active]:text-foreground hover:text-foreground"
-            >
-              <Bookmark className="w-4 h-4" />
-              SAVED
-            </TabsTrigger>
+            
 
             <TabsTrigger
               value="requests"
