@@ -10,7 +10,7 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import Comments from "./Comments";
 import api from "@/lib/axiosinstance";
 import { toast } from "sonner";
@@ -47,6 +47,8 @@ interface Post {
   isLiked: boolean;
 }
 
+import { useAuthStore } from "@/lib/store";
+
 export default function PostDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -55,6 +57,12 @@ export default function PostDetail() {
   const [loading, setLoading] = useState(true);
   const [likeCount, setLikeCount] = useState(0);
   const [isLikeLoading, setIsLikeLoading] = useState(false);
+  const user = useAuthStore((state) => state.user);
+
+  if (!user?.isEmailVerified) {
+    toast.error("Please verify your email to access this feature.");
+    return <Navigate to="/home" />;
+  }
 
   const fetchPostDetails = async () => {
     try {

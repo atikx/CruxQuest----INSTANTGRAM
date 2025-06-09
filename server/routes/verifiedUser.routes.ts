@@ -135,6 +135,7 @@ router.get("/getYourPosts", async (req: any, res: any) => {
           },
         },
       },
+      orderBy: (posts, { desc }) => [desc(posts.createdAt)],
     });
 
     res.status(200).json({
@@ -668,6 +669,7 @@ router.get("/getFriendPosts", async (req: any, res: any) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 });
+
 
 router.get("/getComments/:postId", async (req: any, res: any) => {
   try {
