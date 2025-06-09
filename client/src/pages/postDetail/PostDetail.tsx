@@ -1,7 +1,7 @@
-import { Heart, MessageCircle, ArrowLeft, Send } from "lucide-react";
+import { Heart, ArrowLeft } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+
 import {
   Carousel,
   CarouselContent,
@@ -14,6 +14,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Comments from "./Comments";
 import api from "@/lib/axiosinstance";
 import { toast } from "sonner";
+import ErrorBoundary from "@/components/custom/ErrorBoundary";
 
 interface User {
   id: string;
@@ -46,8 +47,6 @@ interface Post {
   isLiked: boolean;
 }
 
-
-
 export default function PostDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -79,20 +78,20 @@ export default function PostDetail() {
 
   const handleLike = async () => {
     if (isLikeLoading) return;
-    
+
     setIsLikeLoading(true);
-    
+
     // Store previous state for rollback
     const previousIsLiked = isLiked;
     const previousLikeCount = likeCount;
-    
+
     // Optimistic update
     setIsLiked(true);
-    setLikeCount(prevCount => prevCount + 1);
+    setLikeCount((prevCount) => prevCount + 1);
 
     try {
       const res = await api.post(`/verifiedUser/likePost/${id}`);
-      
+
       if (res.status === 200) {
         // Update with server response if available
         if (res.data.likeCount !== undefined) {
@@ -101,17 +100,17 @@ export default function PostDetail() {
         if (res.data.isLiked !== undefined) {
           setIsLiked(res.data.isLiked);
         }
-        
+
         toast.success(res.data.message || "Post liked successfully!");
         console.log(res.data);
       }
     } catch (error: any) {
       console.error("Error liking post:", error);
-      
+
       // Rollback optimistic update
       setIsLiked(previousIsLiked);
       setLikeCount(previousLikeCount);
-      
+
       toast.error("Failed to like post. Please try again.", {
         description: error.response?.data?.message || "Network error occurred",
       });
@@ -122,20 +121,20 @@ export default function PostDetail() {
 
   const handleUnLike = async () => {
     if (isLikeLoading) return;
-    
+
     setIsLikeLoading(true);
-    
+
     // Store previous state for rollback
     const previousIsLiked = isLiked;
     const previousLikeCount = likeCount;
-    
+
     // Optimistic update
     setIsLiked(false);
-    setLikeCount(prevCount => Math.max(0, prevCount - 1));
+    setLikeCount((prevCount) => Math.max(0, prevCount - 1));
 
     try {
       const res = await api.post(`/verifiedUser/unlikePost/${id}`);
-      
+
       if (res.status === 200) {
         // Update with server response if available
         if (res.data.likeCount !== undefined) {
@@ -144,17 +143,17 @@ export default function PostDetail() {
         if (res.data.isLiked !== undefined) {
           setIsLiked(res.data.isLiked);
         }
-        
+
         toast.success(res.data.message || "Post unliked successfully!");
         console.log(res.data);
       }
     } catch (error: any) {
       console.error("Error unliking post:", error);
-      
+
       // Rollback optimistic update
       setIsLiked(previousIsLiked);
       setLikeCount(previousLikeCount);
-      
+
       toast.error("Failed to unlike post. Please try again.", {
         description: error.response?.data?.message || "Network error occurred",
       });
@@ -331,10 +330,10 @@ export default function PostDetail() {
                     : "text-muted-foreground hover:text-red-500"
                 }`}
               >
-                <Heart 
+                <Heart
                   className={`w-6 h-6 ${isLiked ? "fill-current" : ""} ${
                     isLikeLoading ? "animate-pulse" : ""
-                  }`} 
+                  }`}
                 />
                 <span className="font-medium">
                   {isLikeLoading ? "..." : isLiked ? "Liked" : "Like"}
@@ -345,7 +344,9 @@ export default function PostDetail() {
 
           {/* Nested Comments - Scrollable */}
           <div className="flex-1 overflow-y-auto p-4">
-            <Comments postId={post.id} />
+            <ErrorBoundary>
+              <Comments postId={post.id} />
+            </ErrorBoundary>
           </div>
         </div>
       </div>

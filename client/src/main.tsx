@@ -10,6 +10,7 @@ import { useAuthStore } from "./lib/store.ts";
 import api from "./lib/axiosinstance.ts";
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import ErrorBoundary from "./components/custom/ErrorBoundary.tsx";
 
 const Root = () => {
   const setUser = useAuthStore((state) => state.setUser);
@@ -38,9 +39,12 @@ const Root = () => {
       <Router>
         <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
           <Toaster />
-
-          <AppNavbar />
-          <App />
+          <ErrorBoundary>
+            <AppNavbar />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
         </ThemeProvider>
       </Router>
     </QueryClientProvider>

@@ -33,6 +33,7 @@ import api from "@/lib/axiosinstance";
 import { useDropzone } from "react-dropzone";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import ErrorBoundary from "@/components/custom/ErrorBoundary";
 
 export default function YourProfile() {
   const user = useAuthStore((state) => state.user);
@@ -123,7 +124,7 @@ export default function YourProfile() {
       }
 
       // Update local userData state with new bio
-      setUserData(prev => ({
+      setUserData((prev) => ({
         ...prev,
         aboutMe: editFormData.bio.trim(),
       }));
@@ -209,7 +210,7 @@ export default function YourProfile() {
   // Handle edit profile form submission using mutation
   const handleEditProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate that at least one field has content
     if (
       editFormData.name.trim() === "" &&
@@ -528,8 +529,6 @@ export default function YourProfile() {
               POSTS
             </TabsTrigger>
 
-            
-
             <TabsTrigger
               value="requests"
               className="flex items-center gap-2 text-sm font-medium pt-4 pb-2 bg-transparent data-[state=active]:border-t-2 data-[state=active]:border-black data-[state=active]:shadow-none data-[state=active]:bg-transparent border-t-2 border-transparent text-muted-foreground data-[state=active]:text-foreground hover:text-foreground relative"
@@ -541,18 +540,15 @@ export default function YourProfile() {
         </TabsList>
 
         <TabsContent value="posts" className="mt-0">
-          <YourPosts />
-        </TabsContent>
-
-        <TabsContent value="saved" className="mt-0">
-          <div className="text-center py-12 text-muted-foreground">
-            <Bookmark className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No saved posts yet</p>
-          </div>
+          <ErrorBoundary>
+            <YourPosts />
+          </ErrorBoundary>
         </TabsContent>
 
         <TabsContent value="requests" className="mt-0">
-          <FriendRequests />
+          <ErrorBoundary>
+            <FriendRequests />
+          </ErrorBoundary>
         </TabsContent>
       </Tabs>
     </div>

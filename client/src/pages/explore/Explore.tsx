@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { X, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import ErrorBoundary from "@/components/custom/ErrorBoundary";
 
 // API Types
 interface Post {
@@ -355,7 +356,7 @@ export default function Explore() {
         )}
 
         {!isLoading && posts.length > 0 && (
-          <>
+          <ErrorBoundary>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {posts.map((post: Post) => (
                 <div key={post.id}>
@@ -376,7 +377,7 @@ export default function Explore() {
                 onPageChange={handlePageChange}
               />
             )}
-          </>
+          </ErrorBoundary>
         )}
       </div>
     </div>

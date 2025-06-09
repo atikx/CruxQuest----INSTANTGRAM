@@ -5,8 +5,7 @@ import { useAuthStore } from "@/lib/store";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ClipLoader } from "react-spinners";
-
-
+import ErrorBoundary from "@/components/custom/ErrorBoundary";
 
 export default function Home() {
   const user = useAuthStore((state) => state.user);
@@ -193,10 +192,12 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-wrap gap-8 md:gap-4 lg:gap-8 px-8 md:px-4 lg:px-8">
-      {friendPosts.map((post : any) => (
-        <PostCard key={post.id} post={post} />
-      ))}
-    </div>
+    <ErrorBoundary>
+      <div className="flex flex-wrap gap-8 md:gap-4 lg:gap-8 px-8 md:px-4 lg:px-8">
+        {friendPosts.map((post: any) => (
+          <PostCard key={post.id} post={post} />
+        ))}
+      </div>
+    </ErrorBoundary>
   );
 }
