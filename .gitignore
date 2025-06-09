@@ -1,6 +1,9 @@
 # Ignore all .env files in root and subdirectories
 .env
 */.env
+**/.env
+/client/.env
+/server/.env
 
 # Ignore entire public and config folders inside /server
 /server/public/
