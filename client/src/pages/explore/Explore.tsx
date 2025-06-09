@@ -56,7 +56,7 @@ const fetchPostsToExplore = async ({
       timeFilter,
       tags: tags.join(","), // for /getPostsToExplore only
       page,
-      limit: 9,
+      limit: 6,
     },
   });
 
@@ -151,16 +151,6 @@ export default function Explore() {
   queryParams.forEach((value, key) => {
     queries[key] = value;
   });
-
-  const getSearchedPost = async () => {
-    try {
-      const res = await api.get(`/user/getSearchedPosts/${search}`, {});
-      console.log(res.data);
-    } catch (error) {
-      console.error("Error fetching searched posts:", error);
-      return [];
-    }
-  };
 
   useEffect(() => {
     const urlTags = queryParams.getAll("tag");

@@ -286,7 +286,7 @@ router.get(
   async (req: any, res: any) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 9;
+      const limit = parseInt(req.query.limit) || 6;
       const timeFilter = req.query.timeFilter || "All Time";
       const sort = req.query.sort || "New";
       const tags = req.query.tags
@@ -306,7 +306,9 @@ router.get(
 
       // Redis Caching: only for page 1
       const isCacheable = page === 1;
-      const cacheKey = `explore:${sort}:${timeFilter}:${tags.join(",") || "all"}`;
+      const cacheKey = `explore:${sort}:${timeFilter}:${
+        tags.join(",") || "all"
+      }`;
 
       if (isCacheable) {
         const cached = await redis.get(cacheKey);
@@ -577,7 +579,7 @@ router.get(
     try {
       const tagName = req.params.tagName;
       const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 9;
+      const limit = parseInt(req.query.limit) || 6;
       const timeFilter = req.query.timeFilter || "All Time";
       const sort = req.query.sort || "New";
 
