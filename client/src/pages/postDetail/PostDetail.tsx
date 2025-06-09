@@ -304,7 +304,14 @@ export default function PostDetail() {
                 <span className="text-sm">{post.description}</span>
                 {post.tags.length > 0 && (
                   <span className="text-primary text-sm mt-2">
-                    {post.tags.map((tag) => `#${tag.tag.name}`).join(" ")}
+                    {post.tags.map((tag) => (
+                      <span
+                        onClick={() => navigate(`/explore/${tag.tag.name}`)}
+                        className="curpsor-pointer hover:underline"
+                      >
+                        #{tag.tag.name}{" "}
+                      </span>
+                    ))}
                   </span>
                 )}
               </div>
